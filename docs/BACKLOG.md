@@ -4,7 +4,20 @@ Mejoras planeadas, sin fecha fija. Mover a "En progreso"/"Hecho" a mano según s
 vaya trabajando.
 
 ## Alta prioridad
-_(vacío por ahora)_
+Reportados probando contra una base real de trabajo (171 tablas). Ver
+detalle técnico y dirección de arreglo en
+[`STACK_EXPLORATION.md`](STACK_EXPLORATION.md) — documentados, todavía sin
+implementar (a propósito, primero se está dialogando la pregunta de fondo
+sobre el stack).
+- [ ] Notificaciones dejan un espacio vacío en el layout al desaparecer.
+      Pasar a notificaciones flotantes tipo "toast" (posicionadas con
+      `.place()`, no reservan espacio en el grid).
+- [ ] La app se pone "Non Responding" en escaneos grandes. Causa raíz:
+      `run_db_scan()` hace 3 consultas *por tabla* (513 round-trips para
+      171 tablas). Pasar a 4 consultas totales (todo de una, agrupado en
+      Python) + agregar un indicador de progreso visual mientras escanea.
+- [ ] No se puede renombrar una conexión guardada (el alias es fijo desde
+      que se crea).
 
 ## Media prioridad
 - [ ] Agregar tests automatizados mínimos (más allá de `test_syntax.py`, que
@@ -18,6 +31,9 @@ _(vacío por ahora)_
       siempre arranca en oscuro.
 
 ## Baja prioridad / exploración
+- [ ] El Mapa Relacional se ve caótico en esquemas grandes (171 tablas /
+      44 relaciones en la prueba real). Ligado a la pregunta de fondo del
+      stack — ver [`STACK_EXPLORATION.md`](STACK_EXPLORATION.md).
 - [ ] Evaluar cuáles layouts de mapa (radial, jerárquico, zonificado, tráfico,
       neural) de las versiones anteriores conviene ofrecer como opción en la
       UI actual.

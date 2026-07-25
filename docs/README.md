@@ -6,6 +6,9 @@
 - [BACKLOG.md](BACKLOG.md) — mejoras planeadas, sin fecha fija.
 - [BUGS.md](BUGS.md) — bugs conocidos / deuda técnica detectada.
 - [RELEASE_PLAN.md](RELEASE_PLAN.md) — plan para .exe + instalador + release en GitHub.
+- [STACK_EXPLORATION.md](STACK_EXPLORATION.md) — documento vivo dialogando si
+  seguimos con CustomTkinter/Tkinter o migramos (parcial o totalmente) a
+  otro stack, sobre todo para el Mapa Relacional.
 
 Este proyecto es independiente del entorno de trabajo del autor. Puede usar datos de
 prueba locales durante el desarrollo, pero esos datos nunca se publican ni se incluyen
