@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+db_maps.json
+db_maps_v2.json
+dist/
+build/
+*.spec
+graphify-out/
+images/generated/
+installer/output/
+.obsidian/
