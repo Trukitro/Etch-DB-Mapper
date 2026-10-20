@@ -118,8 +118,8 @@
   /* ---------- API ---------- */
   window.EtchMockApi = {
     async bootstrap() {
-      return { app_name: 'Etch-DB-Mapper', version: '2.0.0', repo_url: 'https://github.com/Trukitro/Etch-DB-Mapper', platform: 'dev',
-        data_dir: '(modo desarrollo: datos simulados en memoria)', settings: { theme: localStorage.getItem('etch-dev-theme') || 'dark', sidebar_collapsed: false, map_layout: 'fcose', map_include_orphans: false, last_alias: '', seen_version: '2.0.0' },
+      return { app_name: 'Etch-DB-Mapper', version: '2.1.0', repo_url: 'https://github.com/Trukitro/Etch-DB-Mapper', platform: 'dev',
+        data_dir: '(modo desarrollo: datos simulados en memoria)', settings: { theme: localStorage.getItem('etch-dev-theme') || 'dark', sidebar_collapsed: false, map_layout: 'fcose', map_include_orphans: false, last_alias: '', seen_version: '2.1.0' },
         connections: list(), warnings: [] };
     },
     async save_settings(p) { if (p && p.theme) { try { localStorage.setItem('etch-dev-theme', p.theme); } catch (e) { /* nada */ } } return { ok: true, settings: p }; },
@@ -131,6 +131,53 @@
     async check_uri(uri) {
       const engine = engineOf(uri), native = ['postgres', 'mssql', 'mysql', 'sqlite'].includes(engine);
       return { engine, reader: engine ? (native ? 'native' : 'generic') : null, driver_error: engine === 'mysql' ? 'Falta el driver de MySQL: pip install pymysql' : null };
+    },
+    async list_drivers() {
+      return { odbc: ['ODBC Driver 18 for SQL Server', 'ODBC Driver 17 for SQL Server', 'SQL Server'], engines: {
+        postgres: { label: 'PostgreSQL', port: 5432, driver_error: null }, mssql: { label: 'SQL Server', port: 1433, driver_error: null },
+        mysql: { label: 'MySQL / MariaDB', port: 3306, driver_error: 'Falta el driver \'pymysql\' para conectar a mysql. Instalalo con: pip install pymysql' },
+        sqlite: { label: 'SQLite', port: null, driver_error: null } } };
+    },
+    /* versión simplificada de core/uri.py (la real es la de Python) */
+    async build_uri(f) {
+      const enc = encodeURIComponent, req = (v, m) => { if (!String(v || '').trim()) throw new Error(m); };
+      try {
+        if (!f.engine) throw new Error('Elegí un tipo de base de datos.');
+        if (f.engine === 'sqlite') { req(f.path, 'Indicá la ruta del archivo SQLite.'); const u = 'sqlite://' + f.path.replace(/\\/g, '/'); return { ok: true, uri: u, masked: u }; }
+        req(f.host, 'Falta el servidor (host o IP).'); req(f.user, 'Falta el usuario.'); req(f.database, 'Falta el nombre de la base de datos.');
+        if (f.port && !/^\d{1,5}$/.test(f.port)) throw new Error('El puerto debe ser un número entre 1 y 65535.');
+        const scheme = f.scheme || { postgres: 'postgres', mssql: 'mssql4', mysql: 'mysql' }[f.engine];
+        const args = [];
+        if (f.engine === 'mssql') { if (f.driver) args.push('DRIVER={' + f.driver + '}'); if (f.trust_cert) args.push('TrustServerCertificate=yes'); }
+        if (f.extra) args.push(f.extra);
+        const base = scheme + '://' + enc(f.user.trim());
+        const tail = '@' + f.host.trim() + (f.port ? ':' + f.port : '') + '/' + f.database.trim() + (args.length ? '?' + args.join('&') : '');
+        return { ok: true, uri: base + (f.password ? ':' + enc(f.password) : '') + tail, masked: base + (f.password ? ':••••' : '') + tail };
+      } catch (e) { return { ok: false, error: e.message }; }
+    },
+    async parse_uri(uri) {
+      const m = /^([a-z0-9]+):\/\/(.*)$/i.exec((uri || '').trim());
+      if (!m) return { ok: false, fields: null };
+      const engine = engineOf(uri);
+      if (!['postgres', 'mssql', 'mysql', 'sqlite'].includes(engine)) return { ok: false, fields: null };
+      if (engine === 'sqlite') return { ok: true, fields: { engine, scheme: m[1], path: m[2] } };
+      const at = m[2].lastIndexOf('@'); if (at < 0) return { ok: false, fields: null };
+      const [user, ...pw] = m[2].slice(0, at).split(':');
+      const loc = /^([^:/]*)(?::(\d+))?\/([^?]*)(?:\?(.*))?$/.exec(m[2].slice(at + 1)); if (!loc) return { ok: false, fields: null };
+      const f = { engine, scheme: m[1], host: loc[1], port: loc[2] || '', user: decodeURIComponent(user), password: decodeURIComponent(pw.join(':')), database: loc[3], driver: '', trust_cert: false, extra: '' };
+      const rest = [];
+      (loc[4] || '').split('&').filter(Boolean).forEach((p) => {
+        const [k, v = ''] = p.split('=');
+        if (engine === 'mssql' && k.toUpperCase() === 'DRIVER') f.driver = v.replace(/[{}]/g, '');
+        else if (engine === 'mssql' && k.toLowerCase() === 'trustservercertificate') f.trust_cert = /^(yes|true|1)$/i.test(v);
+        else rest.push(p);
+      });
+      f.extra = rest.join('&');
+      return { ok: true, fields: f };
+    },
+    async test_connection(uri) {
+      await delay(700);
+      return /192\.0\.2\.|fail|caido/i.test(uri) ? { ok: false, error: 'No se pudo alcanzar 192.0.2.10:5432 (timed out). Revisá host, puerto, firewall o VPN.' } : { ok: true, seconds: 0.31 };
     },
     async get_connection(alias) { return store[alias] ? { ok: true, alias, uri: store[alias].uri } : { ok: false, error: 'La conexión ya no existe.' }; },
     async save_connection(alias, uri, previous) {

@@ -107,6 +107,23 @@ class ApiTests(unittest.TestCase):
         self.assertIn("Guía", self.api.get_help()["markdown"])
         self.assertIn("Novedades", self.api.get_changelog()["markdown"])
 
+    def test_wizard_api_roundtrip_and_never_leaks_in_masked(self):
+        r = self.api.build_uri({"engine": "postgres", "host": "h", "user": "u", "password": "Secreto!", "database": "d"})
+        self.assertTrue(r["ok"])
+        self.assertNotIn("Secreto", r["masked"])
+        parsed = self.api.parse_uri(r["uri"])
+        self.assertTrue(parsed["ok"])
+        self.assertEqual(parsed["fields"]["password"], "Secreto!")
+        self.assertFalse(self.api.build_uri({"engine": "postgres"})["ok"])
+
+    def test_list_drivers_shape(self):
+        d = self.api.list_drivers()
+        self.assertIsInstance(d["odbc"], list)
+        self.assertEqual(set(d["engines"]), {"postgres", "mssql", "mysql", "sqlite"})
+
+    def test_test_connection_reports_failure(self):
+        self.assertFalse(self.api.test_connection("postgres://u:p@127.0.0.1:1/db")["ok"])
+
     def test_internal_attributes_are_not_public(self):
         public = [n for n in dir(self.api) if not n.startswith("_")]
         for forbidden in ("store", "window", "lock"):

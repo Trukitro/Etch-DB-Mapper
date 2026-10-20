@@ -31,7 +31,7 @@ Opciones: `--debug` (DevTools con clic derecho → Inspeccionar), `--data-dir RU
 
 ## Uso básico
 
-1. **Nueva conexión** → nombre + URI, por ejemplo `postgres://usuario:clave@host:5432/base`.
+1. **Nueva conexión** → nombre, tipo de base (PostgreSQL, SQL Server, MySQL, SQLite) y servidor/usuario/contraseña. ¿Prefieres la URI? Pestaña *URI avanzada*, por ejemplo `postgres://usuario:clave@host:5432/base`.
 2. **Guardar y escanear**.
 3. Explorá las pestañas **Resumen**, **Explorador** y **Mapa**.
 
@@ -44,6 +44,7 @@ db_manager_app.py     Lanzador: crea la ventana pywebview y expone la API
 core/
   api.py              API que ve la UI (window.pywebview.api.*) + eventos de escaneo
   scanner.py          Lectores de esquema por motor (pyDAL) y utilidades
+  uri.py              Asistente de conexión: armar y descomponer URI
   storage.py          Persistencia JSON (conexiones y ajustes), escritura atómica
   paths.py            Rutas por sistema operativo y recursos empaquetados
   demo.py             Base SQLite de ejemplo

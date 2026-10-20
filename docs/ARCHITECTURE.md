@@ -11,6 +11,7 @@ Aplicación de escritorio en dos capas que se hablan por un puente de pywebview:
                 │ evaluate_js("EtchBridge.emit(evento, datos)")    │ window.pywebview.api.metodo(...)
 ┌───────────────┴──────────────────────────────────────────────────▼───────────────────────┐
 │ core/api.py  (clase Api: métodos públicos = lo que ve JS)                                 │
+│   ├─ core/uri.py       Construir/descomponer URI del asistente de conexión
 │   ├─ core/storage.py   Store: db_maps.json + settings.json (atómico, con id estable)      │
 │   ├─ core/scanner.py   run_db_scan(uri, progress) → esquema + meta  (pyDAL)               │
 │   └─ core/demo.py, core/paths.py, core/version.py                                         │
@@ -25,6 +26,7 @@ No hay servidor HTTP ni Flask: la interfaz se carga desde `file://` y habla con 
 - **Nada de `innerHTML` con datos de la base.** Los nombres de tablas/columnas pueden contener cualquier cosa; la UI construye el DOM con `h()` (`util.js`). La única excepción es el Markdown de `HELP.md`/`CHANGELOG.md`, que es contenido propio y se escapa antes (`renderMarkdown`).
 - **CSP estricta** en `index.html` (`default-src 'none'`, scripts solo locales). `connect-src 'self'` existe solo para el modo desarrollo.
 - **Solo lectura de metadatos.** El scanner no ejecuta nada contra las tablas del usuario, únicamente consultas al catálogo del motor.
+- **Credenciales codificadas.** El asistente codifica usuario y clave con porcentaje y `_open_dal` abre pydal con `decode_credentials=True`; así `@ : / %` no rompen la URI.
 - **Las URI no se exponen completas.** Las listas y eventos llevan `masked_uri`; la URI real solo viaja en `get_connection` (para editar) y vive en el archivo local del usuario.
 - **Las tareas largas corren en un hilo** y avisan por eventos; la UI nunca espera una consulta.
 
@@ -40,6 +42,9 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 | `open_external(url)` | Abre solo `http(s)` en el navegador del sistema |
 | `list_connections()`, `get_connection(alias)` | Resúmenes / URI completa para editar |
 | `check_uri(uri)` | Motor detectado y driver instalado (sin conectar) |
+| `list_drivers()` | Drivers ODBC de SQL Server instalados y drivers de Python faltantes por motor |
+| `build_uri(campos)`, `parse_uri(uri)` | Asistente de conexión: arma la URI (con codificación de usuario y clave) y la descompone |
+| `test_connection(uri)` | Driver + alcance de red + `SELECT 1`; no guarda ni lee el esquema |
 | `save_connection(alias, uri, previous_alias)` | Crea/edita/renombra **antes** de escanear |
 | `rename_connection(old, new)`, `delete_connection(alias)` | Gestión |
 | `create_demo_connection()` | Crea la base SQLite de ejemplo |

@@ -4,28 +4,37 @@ Etch-DB-Mapper lee **solo el esquema** de tu base de datos —tablas, columnas, 
 
 ## Primeros pasos
 
-1. **Creá una conexión.** Hacé clic en **Nueva conexión** (o `Ctrl+N`). Poné un nombre (por ejemplo `Producción`) y pegá la URI de tu base. Si querés solo mirar cómo funciona, usá **Probar con una base de ejemplo**.
+1. **Creá una conexión.** Hacé clic en **Nueva conexión** (o `Ctrl+N`). Poné un nombre (por ejemplo `Producción`), elegí el tipo de base y completá servidor, usuario y contraseña (o pegá una URI en la pestaña *URI avanzada*). Si querés solo mirar cómo funciona, usá **Probar con una base de ejemplo**.
 2. **Guardala.** La conexión se guarda en tu equipo apenas tocás **Guardar**, aunque todavía no funcione. Si el escaneo falla, no hace falta volver a escribir nada: corregís y reintentás.
 3. **Escaneá.** Con **Guardar y escanear** (o **Reescanear** más tarde) la app lee el esquema. Verás el progreso por fases y podés seguir usando la app mientras tanto.
 4. **Explorá.** Cuando termina, aparecen tres pestañas: **Resumen**, **Explorador** y **Mapa**.
 
 > Consejo: usá una cuenta de **solo lectura** de la base. Etch-DB-Mapper solo consulta metadatos, pero una cuenta limitada es siempre más segura.
 
-## Cómo armar la URI
+## Cómo conectarte
 
-La URI sigue el formato de [pydal](https://py4web.com/_documentation/static/en/chapter-07.html): `motor://usuario:clave@host:puerto/base`.
+Al crear o editar una conexión tenés dos formas, en las pestañas del diálogo:
 
-| Motor | Ejemplo de URI | Driver necesario |
+- **Asistente** (recomendado): elegí el **tipo de base de datos** (PostgreSQL, SQL Server, MySQL / MariaDB o SQLite) y completá servidor, puerto, base, usuario y contraseña. La app arma la URI por vos y la muestra abajo (con la contraseña oculta). El puerto ya viene con el valor habitual si lo dejás vacío.
+  - En **SQL Server** se detectan los drivers ODBC instalados y se elige el más nuevo; si el servidor usa un certificado autofirmado, marcá *Confiar en el certificado del servidor*.
+  - En **SQLite** elegís el archivo con el botón.
+- **URI avanzada**: escribís o pegás la URI de [pydal](https://py4web.com/_documentation/static/en/chapter-07.html) tal cual (`motor://usuario:clave@host:puerto/base`). Es la opción para otros motores y para quien prefiere el texto. Podés pasar de una pestaña a la otra: la URI se descompone en campos y viceversa.
+
+Con **Probar conexión** verificás driver, red y credenciales en segundos, sin guardar ni escanear.
+
+### Ejemplos de URI
+
+| Motor | Ejemplo | Driver necesario |
 |---|---|---|
 | PostgreSQL | `postgres://usuario:clave@host:5432/base` | `psycopg2-binary` |
 | SQL Server | `mssql4://usuario:clave@host:1433/base?DRIVER={ODBC Driver 18 for SQL Server}` | `pyodbc` + driver ODBC de Microsoft |
 | MySQL / MariaDB | `mysql://usuario:clave@host:3306/base` | `pymysql` |
 | SQLite | `sqlite://C:/ruta/a/mi_base.db` | ya incluido en Python |
 
-- En SQL Server, el parámetro `DRIVER=` indica qué driver ODBC usar. Los nombres habituales son `{ODBC Driver 18 for SQL Server}`, `{ODBC Driver 17 for SQL Server}` y `{SQL Server}`. Para ver cuáles tenés instalados, abrí **Orígenes de datos ODBC** en Windows, pestaña *Controladores*.
-- Si la contraseña tiene caracteres como `@`, `/` o `:`, puede romper la URI. Lo más simple es usar una cuenta con una contraseña sin esos símbolos.
+- En SQL Server, `DRIVER=` indica qué driver ODBC usar (`{ODBC Driver 18 for SQL Server}`, `{ODBC Driver 17 for SQL Server}`, `{SQL Server}`). Con certificado autofirmado agregá `&TrustServerCertificate=yes`.
+- Si la contraseña o el usuario tienen caracteres especiales (`@`, `:`, `/`, `%`), el Asistente los codifica solo. Escribiendo la URI a mano, usá la codificación con porcentaje: `@` = `%40`, `:` = `%3A`, `/` = `%2F`, `%` = `%25`.
 - Cualquier otro motor que pydal soporte se intenta con el `INFORMATION_SCHEMA` estándar; puede funcionar o no según el motor.
-- Mientras escribís, la app te avisa si reconoce el motor y si falta instalar el driver.
+- Mientras escribís en la pestaña avanzada, la app te avisa si reconoce el motor y si falta instalar el driver.
 
 ## Dónde encontrar la información
 

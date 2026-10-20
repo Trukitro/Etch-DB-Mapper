@@ -338,13 +338,48 @@ def compute_meta(tables: dict) -> dict:
 
 # ------------------------------------------------------------------ entrada
 def _open_dal(uri, engine):
-    kwargs = {"migrate_enabled": False, "folder": None}
+    # decode_credentials: usuario/clave pueden venir con %-codificación (el asistente
+    # de conexión las codifica para que '@', ':' o '/' no rompan la URI).
+    kwargs = {"migrate_enabled": False, "folder": None, "decode_credentials": True}
     if engine == "sqlite":
         import os
         path = uri.split("://", 1)[-1].split("?", 1)[0]
         if path != ":memory:" and not os.path.isabs(path) and not re.match(r"^[a-zA-Z]:", path):
             kwargs["folder"] = os.getcwd()
     return DAL(uri, **kwargs)
+
+
+def test_connection(uri, timeout=5.0):
+    """Prueba rápida (sin leer el esquema): driver instalado, red alcanzable y
+    un `SELECT 1`. Devuelve {"ok": True, "seconds": s} o {"ok": False, "error": msg}."""
+    import socket
+    from .uri import target_of
+
+    start = time.time()
+    driver_error = check_driver_available(uri)
+    if driver_error:
+        return {"ok": False, "error": driver_error}
+    engine = detect_engine(uri)
+    target = target_of(uri)
+    if target:   # falla rápido y claro si el servidor ni siquiera responde
+        try:
+            socket.create_connection(target, timeout=timeout).close()
+        except OSError as e:
+            return {"ok": False, "error": f"No se pudo alcanzar {target[0]}:{target[1]} ({e.strerror or e}). "
+                                          "Revisá host, puerto, firewall o VPN."}
+    db = None
+    try:
+        db = _open_dal(uri, engine)
+        db.executesql("SELECT 1")
+        return {"ok": True, "seconds": round(time.time() - start, 2)}
+    except Exception as e:
+        return {"ok": False, "error": summarize_error(e)}
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 def run_db_scan(uri, progress=None):

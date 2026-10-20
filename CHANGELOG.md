@@ -2,6 +2,17 @@
 
 Historial de cambios de Etch-DB-Mapper. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen [SemVer](https://semver.org/lang/es/).
 
+## [2.1.0] - 2026-10-20
+
+### Nuevo
+- **Asistente de conexión**: elegí el tipo de base (PostgreSQL, SQL Server, MySQL / MariaDB, SQLite) y completá servidor, puerto, base, usuario y contraseña; la URI se arma sola. La pestaña **URI avanzada** sigue disponible y se puede alternar entre ambas sin perder datos.
+- **Probar conexión**: verifica driver, red y credenciales sin guardar ni escanear, con mensajes claros (por ejemplo, si el servidor no responde).
+- SQL Server: detección de los drivers ODBC instalados (se elige el más nuevo) y opción para confiar en certificados autofirmados.
+- Puertos por defecto y vista previa de la URI con la contraseña oculta.
+
+### Corregido
+- Contraseñas con caracteres como `@`, `:` o `/` ya no rompen la URI: se codifican y se decodifican al conectar.
+
 ## [2.0.0] - 2026-10-20
 
 Reescritura de la interfaz: de CustomTkinter a una interfaz web local (pywebview + HTML, CSS y JS). Más rápida, más clara y lista para crecer.

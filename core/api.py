@@ -19,10 +19,12 @@ import time
 import webbrowser
 from datetime import datetime
 
+from . import uri as uri_tools
 from .demo import DEMO_ALIAS, create_demo_db
 from .paths import resource_path
 from .scanner import (
-    compute_meta, detect_engine, finalize_schema, inspect_uri, mask_uri, run_db_scan, summarize_error,
+    check_driver_available, compute_meta, detect_engine, finalize_schema, inspect_uri, mask_uri, run_db_scan,
+    summarize_error, test_connection,
 )
 from .version import APP_NAME, REPO_URL, __version__
 
@@ -135,6 +137,31 @@ class Api:
 
     def check_uri(self, uri: str) -> dict:
         return inspect_uri((uri or "").strip())
+
+    def list_drivers(self) -> dict:
+        """Para el asistente: drivers ODBC de SQL Server instalados y qué motores
+        no tienen su driver de Python."""
+        missing = {e: check_driver_available(info["scheme"] + "://") for e, info in uri_tools.ENGINES.items()}
+        return {
+            "odbc": uri_tools.odbc_drivers(),
+            "engines": {e: {"label": info["label"], "port": info["port"], "driver_error": missing[e]}
+                        for e, info in uri_tools.ENGINES.items()},
+        }
+
+    def build_uri(self, fields: dict) -> dict:
+        try:
+            uri = uri_tools.build_uri(fields or {})
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "uri": uri, "masked": mask_uri(uri)}
+
+    def parse_uri(self, uri: str) -> dict:
+        fields = uri_tools.parse_uri(uri)
+        return {"ok": fields is not None, "fields": fields}
+
+    def test_connection(self, uri: str) -> dict:
+        """Conecta y hace un SELECT 1 (no lee el esquema ni guarda nada)."""
+        return test_connection((uri or "").strip())
 
     def get_connection(self, alias: str) -> dict:
         entry = self._store.get(alias)
