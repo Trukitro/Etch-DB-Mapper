@@ -1,8 +1,11 @@
 ; Inno Setup script for Etch-DB-Mapper
-; Build with: ISCC.exe installer\setup.iss
+; Build with: tools\build_windows.ps1 -Installer
+;   (o a mano: ISCC.exe /DMyAppVersion=2.0.0 installer\setup.iss)
 
 #define MyAppName "Etch-DB-Mapper"
-#define MyAppVersion "1.5.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "2.0.0"
+#endif
 #define MyAppPublisher "Etch"
 #define MyAppURL "https://github.com/Trukitro/Etch-DB-Mapper"
 #define MyAppExeName "Etch-DB-Mapper.exe"
@@ -44,3 +47,28 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// La interfaz usa Microsoft Edge WebView2 (viene con Windows 11 y Windows 10 actualizado).
+function WebView2Installed(): Boolean;
+var
+  Version: String;
+begin
+  Result :=
+    RegQueryStringValue(HKLM32, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) or
+    RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version);
+  if Result then
+    Result := (Version <> '') and (Version <> '0.0.0.0');
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if (not WizardSilent) and (not WebView2Installed()) then
+    Result := MsgBox(
+      'Etch-DB-Mapper necesita el runtime "Microsoft Edge WebView2", que no se detecto en este equipo.' + #13#10 +
+      'Puedes descargarlo desde https://developer.microsoft.com/microsoft-edge/webview2/' + #13#10 +
+      '(Etch-DB-Mapper no abrira hasta que este instalado).' + #13#10#13#10 +
+      'Quieres continuar con la instalacion de todos modos?',
+      mbConfirmation, MB_YESNO) = IDYES;
+end;
