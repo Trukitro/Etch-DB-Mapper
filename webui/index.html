@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' file:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Etch-DB-Mapper</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside id="sidebar" class="sidebar" aria-label="Conexiones"></aside>
+    <main class="main">
+      <header id="topbar" class="topbar"></header>
+      <div id="scanbar" class="scanbar" hidden><span></span></div>
+      <section id="view" class="view" aria-live="polite"></section>
+    </main>
+  </div>
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+  <div id="modal-root"></div>
+
+  <!-- Mapa: Cytoscape.js + layout fcose (vendorizados, sin CDN, ver THIRD_PARTY_NOTICES.md) -->
+  <script src="vendor/cytoscape.min.js"></script>
+  <script src="vendor/layout-base.js"></script>
+  <script src="vendor/cose-base.js"></script>
+  <script src="vendor/cytoscape-fcose.js"></script>
+
+  <script src="js/util.js"></script>
+  <script src="js/bridge.js"></script>
+  <script src="js/toast.js"></script>
+  <script src="js/dialogs.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/views/home.js"></script>
+  <script src="js/views/overview.js"></script>
+  <script src="js/views/explorer.js"></script>
+  <script src="js/views/map.js"></script>
+  <script src="js/views/docs.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

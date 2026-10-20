@@ -1,0 +1,9 @@
+# Núcleo
+pywebview>=5.0
+pydal>=20240101
+
+# Drivers de base de datos (instalá solo los que uses)
+psycopg2-binary>=2.9      # PostgreSQL
+pyodbc>=5.0               # SQL Server (además necesita un driver ODBC de Microsoft)
+pymysql>=1.1              # MySQL / MariaDB
+# SQLite viene incluido en Python
