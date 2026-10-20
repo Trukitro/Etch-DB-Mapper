@@ -4,48 +4,40 @@ Mejoras planeadas, sin fecha fija. Mover a "En progreso"/"Hecho" a mano según s
 vaya trabajando.
 
 ## Alta prioridad
-Reportados probando contra una base real de trabajo (171 tablas). Ver
-detalle técnico y dirección de arreglo en
-[`STACK_EXPLORATION.md`](STACK_EXPLORATION.md) — documentados, todavía sin
-implementar (a propósito, primero se está dialogando la pregunta de fondo
-sobre el stack).
-- [ ] Notificaciones dejan un espacio vacío en el layout al desaparecer.
-      Pasar a notificaciones flotantes tipo "toast" (posicionadas con
-      `.place()`, no reservan espacio en el grid).
-- [ ] La app se pone "Non Responding" en escaneos grandes. Causa raíz:
-      `run_db_scan()` hace 3 consultas *por tabla* (513 round-trips para
-      171 tablas). Pasar a 4 consultas totales (todo de una, agrupado en
-      Python) + agregar un indicador de progreso visual mientras escanea.
-- [ ] No se puede renombrar una conexión guardada (el alias es fijo desde
-      que se crea).
+- [ ] **Verificar el scanner contra bases reales con 2.0.0**: la consulta nativa
+      de FKs de SQL Server (`sys.foreign_key_columns`) y los lectores de
+      PostgreSQL/MySQL están probados con SQLite y revisados a mano, pero hay
+      que confirmarlos contra servidores reales (ver `BUGS.md` #19).
+- [ ] Release 2.0.0 (tag + `.exe` + instalador) — pendiente de confirmación
+      del autor antes de publicar.
 
 ## Media prioridad
-- [ ] Agregar tests automatizados mínimos (más allá de `test_syntax.py`, que
-      solo valida sintaxis) para `core/scanner.py` y `core/storage.py`.
-- [ ] Indicador visual de "cuál DB está seleccionada" en el Historial de DBs
-      (ya existe para las tarjetas de tabla dentro del Explorador, falta a
-      nivel de conexión en la barra lateral).
-- [ ] Botón para eliminar una conexión del historial (hoy solo se puede
-      limpiar todo el archivo `db_maps.json` a mano).
-- [ ] Recordar la preferencia de tema (claro/oscuro) entre sesiones — hoy
-      siempre arranca en oscuro.
+- [ ] **Relaciones inferidas por nombre** (ej. columna `ClienteID` ↔ tabla
+      `Cliente`): muchas bases antiguas no declaran FKs (en la prueba real,
+      121 de 171 tablas quedaban huérfanas). Mostrarlas en el mapa con otro
+      estilo (línea punteada) y un interruptor para activarlas.
+- [ ] Cifrar las URI guardadas (Windows Credential Manager / `keyring`) en vez
+      de dejarlas en `db_maps.json` sin cifrar.
+- [ ] Lectores de esquema nativos para más motores (Oracle, Firebird, DB2).
+      Hoy se intenta `INFORMATION_SCHEMA` estándar. Ver
+      `ARCHITECTURE.md` → «Agregar un lector de esquema».
+- [ ] Probar MySQL/MariaDB contra un servidor real.
+- [ ] Soporte de **Linux** (`LINUX_PLAN.md`): correr desde fuente, CI,
+      AppImage / pip.
+- [ ] Internacionalización (hoy la UI está solo en español).
+- [ ] Capturas de pantalla y GIF de uso en el README.
 
 ## Baja prioridad / exploración
-- [ ] El Mapa Relacional se ve caótico en esquemas grandes (171 tablas /
-      44 relaciones en la prueba real). Ligado a la pregunta de fondo del
-      stack — ver [`STACK_EXPLORATION.md`](STACK_EXPLORATION.md).
-- [ ] Evaluar cuáles layouts de mapa (radial, jerárquico, zonificado, tráfico,
-      neural) de las versiones anteriores conviene ofrecer como opción en la
-      UI actual.
-- [ ] Exportar el mapa de relaciones a imagen (PNG/SVG) o PDF.
-- [ ] Probar contra MySQL (Postgres y SQL Server ya verificados de verdad,
-      contra bases reales — ver `BUGS.md` #2 y #15).
-- [ ] Ajustar la posición de los nodos al cambiar el zoom (hoy el (x,y)
-      guardado es independiente del zoom, así que con nodos más grandes a
-      zoom alto pueden llegar a solaparse si no se los reacomodó a mano).
+- [ ] Exportar el mapa también a SVG/PDF (hoy solo PNG).
+- [ ] Mostrar tipos y columnas dentro de los nodos del mapa (nodos «tarjeta»)
+      cuando se hace zoom.
+- [ ] Layouts adicionales (radial por tabla central, zonificado por prefijo de
+      nombre, p. ej. `ETS_`, `Cat_`).
+- [ ] Comparar dos escaneos de la misma conexión (qué tablas/columnas
+      cambiaron).
 - [ ] Limpiar del historial las posiciones de tablas que ya no existen tras
-      un rescan (hoy quedan guardadas sin usarse, no rompen nada pero son
-      basura).
+      un rescan (no rompen nada, solo ocupan espacio).
+- [ ] Instalador con actualización automática / aviso de versión nueva.
 
 ## Hecho
 - [x] Separar el proyecto público del proyecto de trabajo (este repo).
@@ -138,3 +130,26 @@ sobre el stack).
       (`BUGS.md` #15).
 - [x] Publicado el release `v1.5.0` en GitHub con el `.exe` y el instalador
       actualizados: https://github.com/Trukitro/Etch-DB-Mapper/releases/tag/v1.5.0
+
+### 2.0.0 — reescritura a pywebview + HTML/CSS/JS
+- [x] Migración completa de CustomTkinter a pywebview con HTML, CSS y JS
+      (`STACK_EXPLORATION.md`). Backend en `core/` conservado y ampliado.
+- [x] Notificaciones flotantes («toast») que no reservan espacio en el layout
+      (`BUGS.md` #16).
+- [x] Escaneo en 4 consultas en total (antes 3 por tabla) y progreso por
+      fases en pantalla; la ventana ya no queda «No responde» (`BUGS.md` #17).
+- [x] Renombrar conexiones (menú contextual / editar) con `id` estable
+      (`BUGS.md` #18).
+- [x] Mapa relacional nuevo con Cytoscape.js (fcose): alcance relacionadas /
+      todas / vecindad, modo foco, panel de detalle, posiciones persistentes,
+      exportar PNG.
+- [x] Conexión a cualquier motor accesible por pyDAL (lectores nativos para
+      PostgreSQL, SQL Server, MySQL y SQLite; genérico para el resto).
+- [x] Páginas de **Ayuda** (`HELP.md`) y **Novedades** (`CHANGELOG.md`)
+      dentro de la app, más pantalla de inicio para usuarios nuevos y base
+      de ejemplo integrada.
+- [x] Tema oscuro / claro / del sistema recordado entre sesiones.
+- [x] Eliminar conexiones desde la barra lateral.
+- [x] Tests automatizados (`tests/`, 28 pruebas) y `tools/build_windows.ps1`.
+- [x] Carpeta de datos por sistema operativo y plan de Linux
+      (`LINUX_PLAN.md`).

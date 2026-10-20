@@ -1,8 +1,31 @@
 # Exploración de Stack — Etch-DB-Mapper
 
 Documento vivo para dialogar la pregunta de fondo: ¿seguimos con
-CustomTkinter/Tkinter, o migramos a otra cosa? No es un plan cerrado —
-se va a ir actualizando a medida que sigamos hablando del tema.
+CustomTkinter/Tkinter, o migramos a otra cosa?
+
+> ## ✅ Decisión (2.0.0): migración completa a pywebview + HTML/CSS/JS
+>
+> Se eligió una variante de la **Opción B** sin servidor: la UI completa se
+> reescribió en HTML, CSS y JS vanilla y corre dentro de una ventana
+> **pywebview** (Edge WebView2 en Windows), hablando con Python por el puente
+> `js_api` — sin Flask ni puertos abiertos. La Opción C (híbrido) se descartó
+> porque mezclar dos UIs habría dejado lo peor de ambos mundos; la D, porque
+> igual había que integrar un motor de grafos.
+>
+> - **Mapa**: Cytoscape.js + layout `fcose` (vendorizados, 100 % offline) en
+>   lugar del Canvas de Tkinter dibujado a mano. Resuelve el «caos» de 171
+>   tablas con alcance «relacionadas / todas / vecindad», colores por grupo,
+>   modo foco y posiciones persistentes.
+> - **Backend**: `core/` se conserva (pyDAL, JSON local) y se reescribió el
+>   scanner para ser agnóstico de motor y de 4 consultas en total.
+> - **Empaquetado**: sigue siendo PyInstaller + Inno Setup; la UI viaja como
+>   archivos dentro del `.exe`.
+> - **Linux**: ahora es viable (WebKit2GTK o Qt) — ver [`LINUX_PLAN.md`](LINUX_PLAN.md).
+>
+> Los 3 bugs tácticos de abajo quedaron resueltos por la nueva arquitectura
+> (toasts flotantes, escaneo en 4 consultas + progreso, renombrar conexiones).
+> Detalle en [`ARCHITECTURE.md`](ARCHITECTURE.md). El resto de este documento
+> se conserva como registro del razonamiento original.
 
 ## Motivación / contexto
 
@@ -122,13 +145,9 @@ optimización de queries convendría arreglarlos independientemente de qué
 se decida acá — son de bajo riesgo, alto valor, y no se pierde nada si
 después migramos.
 
-## Próximos pasos (sin decidir todavía)
-- [ ] Seguir dialogando esta decisión.
-- [ ] Si se decide explorar la Opción C: crear una rama de exploración
-      (ej. `explore/webview-map`) para no comprometer `main`, y probar
-      viabilidad de empaquetar `pywebview` + Cytoscape.js con PyInstaller
-      (assets 100% locales, sin depender de internet en tiempo de
-      ejecución).
-- [ ] Decidir si los 3 bugs tácticos + la optimización de queries se
-      arreglan en `main` ahora (recomendado, bajo riesgo) o se esperan a
-      resolver la duda de stack primero.
+## Próximos pasos
+- [x] Dialogar la decisión → migración completa (ver recuadro de arriba).
+- [x] Verificar que `pywebview` + Cytoscape.js se empaquetan con PyInstaller
+      con assets 100 % locales (el `.exe` 2.0.0 corre sin internet).
+- [x] Arreglar los 3 bugs tácticos y la optimización de queries (2.0.0).
+- [ ] Probar el empaquetado en Linux (ver `LINUX_PLAN.md`).

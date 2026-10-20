@@ -68,9 +68,10 @@ fallar en silencio.
 `finally` (solo si llegó a crearse), tanto si el escaneo tuvo éxito como si
 falló.
 
-## 8. `test_syntax.py` no es una suite de tests real
-Solo corre `py_compile` sobre los archivos — valida sintaxis, no comportamiento.
-Está bien como smoke test, pero no reemplaza tests unitarios (ver BACKLOG.md).
+## 8. [RESUELTO] `test_syntax.py` no era una suite de tests real
+Solo corría `py_compile`. En 2.0.0 se reemplazó por `tests/` (unittest, 28
+pruebas sobre scanner, storage y API) y `tools/build_windows.ps1` sigue
+comprobando la sintaxis antes de compilar.
 
 ## 9. [RESUELTO] `test_syntax.py` crasheaba por encoding en consolas cp1252
 Usaba `✅`/`❌` en los `print()`. En una consola con codepage cp1252 (como
@@ -135,3 +136,37 @@ detectado. Detectado y corregido probando contra un SQL Server real de
 trabajo (171 tablas, 1972 columnas, 199 PK, 44 FK) — nunca se había
 verificado de verdad contra SQL Server hasta ahora, pese a que
 `docs/BACKLOG.md` decía "ya verificado" (afirmación incorrecta, corregida).
+
+---
+
+# Resueltos en 2.0.0
+
+Estos tres bugs se reportaron probando contra una base real de 171 tablas y
+los resolvió la migración a pywebview (`STACK_EXPLORATION.md`).
+
+## 16. [RESUELTO] Las notificaciones dejaban un espacio vacío al desaparecer
+El banner vivía en un frame reservado del grid. Ahora los avisos son «toasts»
+en un contenedor `position: fixed` que flota sobre la interfaz: no ocupan
+lugar en el layout, se apilan, se cierran solos y se pausan al pasar el mouse
+(`webui/js/toast.js`).
+
+## 17. [RESUELTO] «No responde» en escaneos grandes (patrón N+1)
+El scanner hacía 3 consultas por tabla (513 para 171 tablas, ~48 s). Ahora
+`core/scanner.py` hace 4 consultas en total por motor, el escaneo corre en un
+hilo y la UI muestra fases (conectar, tablas, columnas, claves, relaciones,
+armar), barra de progreso y cronómetro. Como ya no hay consultas
+parametrizadas, también desaparece de raíz la clase de error `%s` vs `?`
+(#15).
+
+## 18. [RESUELTO] No se podía renombrar una conexión
+Cada conexión tiene ahora un `id` estable; «Renombrar» (menú contextual) y
+«Editar conexión» cambian el alias sin perder el esquema, el mapa ni los
+escaneos en curso (`Store.rename`, `Api.rename_connection`).
+
+## 19. [ABIERTO] Verificar contra servidores reales los lectores nuevos
+Los lectores de 2.0.0 se probaron con SQLite y se revisaron las consultas,
+pero la consulta nativa de FKs de SQL Server (`sys.foreign_key_columns`) y
+los lectores de PostgreSQL/MySQL todavía no se confirmaron contra servidores
+reales con esta versión. Si el login no puede leer `sys.*`, el scanner cae a
+`INFORMATION_SCHEMA` (sin cruce por posición, así que en claves compuestas
+pueden repetirse pares de columnas).

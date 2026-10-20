@@ -1,37 +1,44 @@
 # Release Plan — Etch-DB-Mapper
 
-Cómo se piensa publicar este proyecto, siguiendo el mismo patrón que las demás
-apps de la línea "Etch" del autor. Nada de esto se ejecuta automáticamente —
-cada paso con impacto externo (push, release en GitHub) se confirma antes de
-hacerse.
+Cómo se publica este proyecto, siguiendo el mismo patrón que las demás apps de
+la línea "Etch". Nada de esto se ejecuta automáticamente: cada paso con impacto
+externo (push, tag, release en GitHub) se confirma con el autor antes.
 
-## 1. Preparar el repo local
-- `git init` en este folder.
-- `git remote add origin https://github.com/Trukitro/Etch-DB-Mapper.git`.
-- Primer commit con el código base + docs.
+## 1. Preparar la versión
+- Actualizar la versión en `core/version.py` (única fuente: la usan la app, el
+  instalador y el nombre de los artefactos).
+- Agregar la entrada en `CHANGELOG.md` (formato Keep a Changelog). Es lo que
+  ven los usuarios en **Novedades** dentro de la app.
+- Revisar `HELP.md` si cambió algún flujo.
+- Mover lo hecho en `docs/BACKLOG.md`.
 
-## 2. Build del ejecutable
-- Empaquetar con PyInstaller:
-  `pyinstaller --noconfirm --onefile --windowed --icon favicon.ico db_manager_app.py`
-- Verificar que el `.exe` corre standalone (sin Python instalado) en una
-  máquina limpia o VM.
+## 2. Compilar
+```powershell
+.\tools\build_windows.ps1 -Installer
+```
+Hace, en orden: comprobación de sintaxis → `python -m unittest` →
+`.exe` con PyInstaller en `dist\Etch-DB-Mapper.exe` → instalador con Inno Setup
+en `installer\output\Etch-DB-Mapper-Setup-vX.Y.Z.exe`.
 
-## 3. Instalador wizard
-- Generar instalador con Inno Setup (u otra herramienta wizard que se use en
-  las demás apps Etch), apuntando al `.exe` generado en el paso 2.
-- Icono y metadata del instalador consistentes con el resto de la línea Etch.
+Requisitos en la máquina de build: Python 3.10+, `pip install -r requirements.txt pyinstaller`,
+Inno Setup 6.
 
-## 4. Release en GitHub
-- Tag de versión (ej. `v1.0.0`).
-- `gh release create` (o vía UI) en
-  https://github.com/Trukitro/Etch-DB-Mapper con:
-  - El `.exe` standalone.
-  - El instalador wizard.
-  - Notas de release basadas en `BACKLOG.md` (qué se resolvió) y
-    `FUTURE_PLANS.md` (qué sigue).
+## 3. Verificar
+- Abrir `dist\Etch-DB-Mapper.exe` (idealmente en una máquina sin Python): debe
+  verse la pantalla de inicio y funcionar «Probar con una base de ejemplo».
+- Probar instalar y desinstalar con el instalador.
+- Confirmar que no hay datos de prueba, `db_maps*.json` ni credenciales dentro
+  del `.exe` o del instalador.
 
-## Antes de publicar
-- Confirmar que no queden datos de prueba, `db_maps*.json`, ni nada del
-  entorno de trabajo empaquetado en el `.exe` o el instalador.
-- Confirmar explícitamente con el autor antes de cualquier `git push` o
-  `gh release create` — son acciones visibles públicamente.
+## 4. Publicar (con confirmación del autor)
+```bash
+git push origin main
+git tag vX.Y.Z && git push origin vX.Y.Z
+gh release create vX.Y.Z dist/Etch-DB-Mapper.exe installer/output/Etch-DB-Mapper-Setup-vX.Y.Z.exe \
+   --title "vX.Y.Z" --notes-file <notas>
+```
+Las notas salen de la entrada correspondiente de `CHANGELOG.md`.
+
+## Requisito de ejecución
+La app necesita el runtime **Microsoft Edge WebView2** (incluido en Windows 11
+y en Windows 10 actualizado). El instalador avisa si no lo detecta.
