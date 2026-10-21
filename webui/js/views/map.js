@@ -12,6 +12,20 @@
 
   const ui = { alias: null, scope: null, depth: 2, layout: null, focus: null, selected: null };
   let cy = null, ro = null, onResize = null;
+  const view = { tables: {} };   // esquema efectivo del mapa (con o sin relaciones inferidas)
+
+  /* Copia del esquema con las relaciones inferidas añadidas (marcadas inferred) para que el
+     resto del mapa (grados, grupos, vecindad, panel) las trate como una relación más. */
+  function withInferred(tables, inferred) {
+    const out = {};
+    for (const [n, t] of Object.entries(tables)) out[n] = Object.assign({}, t, { relations: t.relations.slice(), referenced_by: t.referenced_by.slice() });
+    for (const r of inferred) {
+      if (!out[r.table] || !out[r.ref_table]) continue;
+      out[r.table].relations.push({ col: r.col, ref_table: r.ref_table, ref_col: r.ref_col, inferred: true, confidence: r.confidence, reason: r.reason });
+      out[r.ref_table].referenced_by.push({ table: r.table, col: r.col, ref_col: r.ref_col, inferred: true });
+    }
+    return out;
+  }
 
   const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const isLight = () => document.documentElement.getAttribute('data-theme') === 'light';
@@ -53,7 +67,8 @@
     for (const n of set) {
       tables[n].relations.forEach((r, i) => {
         if (!set.has(r.ref_table)) return;
-        edges.push({ data: { id: n + '\u0001' + i, source: n, target: r.ref_table, col: r.col + (r.ref_col ? ' → ' + r.ref_col : '') } });
+        edges.push({ classes: r.inferred ? 'inferred' : '', data: { id: n + '\u0001' + i, source: n, target: r.ref_table,
+          col: r.col + (r.ref_col ? ' → ' + r.ref_col : '') + (r.inferred ? ' (probable)' : '') } });
       });
     }
     return nodes.concat(edges);
@@ -78,6 +93,8 @@
       { selector: 'edge', style: {
         width: 1.4, 'line-color': border, 'curve-style': 'bezier', 'control-point-step-size': 38, 'target-arrow-shape': 'triangle',
         'target-arrow-color': border, 'arrow-scale': 0.9, opacity: 0.9 } },
+      { selector: 'edge.inferred', style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 5], 'line-color': cssVar('--warn'), 'target-arrow-color': cssVar('--warn'),
+        'target-arrow-shape': 'vee', opacity: 0.75 } },
       { selector: '.faded', style: { opacity: 0.08, 'text-opacity': 0.1 } },
       { selector: 'edge.hl', style: {
         'line-color': accent, 'target-arrow-color': accent, width: 2.6, opacity: 1, label: 'data(col)', 'font-size': 10, color: accent,
@@ -136,7 +153,7 @@
 
     const related = nodes.filter((n) => n.data('deg') > 0), orph = nodes.filter((n) => n.data('deg') === 0);
     const missing = related.filter((n) => !has(n));
-    const dist = ui.scope === 'focus' ? neighborhood(Etch.state.schema.tables, ui.focus, ui.depth) : null;
+    const dist = ui.scope === 'focus' ? neighborhood(view.tables, ui.focus, ui.depth) : null;
 
     if (related.length && missing.length) {
       let kind = ui.layout;
@@ -171,7 +188,11 @@
   /* ---------------- vista ---------------- */
   Etch.views.map = {
     render(root, args) {
-      const S = Etch.state, tables = S.schema.tables, names = Object.keys(tables);
+      const S = Etch.state, inferredAll = S.schema.inferred || [];
+      const showInferred = !!S.settings.map_show_inferred && inferredAll.length > 0;
+      const tables = showInferred ? withInferred(S.schema.tables, inferredAll) : S.schema.tables;
+      view.tables = tables;
+      const names = Object.keys(tables);
       if (!window.cytoscape) { root.append(h('div', { class: 'page' }, h('div', { class: 'card' }, h('h2', null, 'No se pudo cargar el motor del mapa'), h('p', { class: 'muted' }, 'Falta vendor/cytoscape.min.js.')))); return; }
       ensureFcose();
 
@@ -208,13 +229,19 @@
       const container = h('div', { id: 'cy' });
       const overlay = h('div', { class: 'map-overlay map-empty', hidden: true });
       const legend = h('div', { class: 'map-overlay map-legend' },
-        h('span', null, h('i'), 'FK → tabla referenciada'), h('span', null, 'Color = grupo de tablas conectadas'), h('span', null, 'Pasá el mouse para enfocar · arrastrá para ordenar'));
+        h('span', null, h('i'), 'FK → tabla referenciada'),
+        showInferred ? h('span', null, h('i', { class: 'dash' }), 'Relación probable (por nombre)') : null,
+        h('span', null, 'Color = grupo de tablas conectadas'), h('span', null, 'Pasá el mouse para enfocar · arrastrá para ordenar'));
       body.append(container, overlay, legend);
       let panel = null;
 
+      const infBtn = h('button', { class: 'chip', 'aria-pressed': String(showInferred), disabled: !inferredAll.length,
+        title: inferredAll.length ? 'Muestra relaciones que la base no declara pero que los nombres sugieren (línea punteada). Son sugerencias, no claves foráneas reales.' : 'No se encontraron relaciones probables por nombre en este esquema.',
+        onclick: async () => { await Etch.saveSetting('map_show_inferred', !showInferred); Etch.render(); } },
+        icon('zap', 13), 'Probables (' + inferredAll.length + ')');
       const btn = (ico, title, fn, label) => h('button', { class: 'btn sm' + (label ? '' : ' icon-only'), title, 'aria-label': title, onclick: fn }, icon(ico, 15), label || null);
       const tools = h('div', { class: 'map-tools' },
-        scopeSel, focusGroup, h('span', { class: 'sep' }), layoutSel, h('span', { class: 'sep' }),
+        scopeSel, focusGroup, h('span', { class: 'sep' }), layoutSel, infBtn, h('span', { class: 'sep' }),
         h('div', { class: 'searchbox' }, icon('search', 15), search), stats, h('div', { class: 'grow' }),
         btn('fit', 'Ajustar a la pantalla', () => cy && cy.animate({ fit: { padding: 50 } }, { duration: 250 })),
         btn('minus', 'Alejar', () => zoomBy(1 / 1.3)), btn('plus', 'Acercar', () => zoomBy(1.3)),
@@ -253,7 +280,7 @@
             h('div', null, 'Esta base no declara relaciones entre tablas.'), h('button', { class: 'btn', style: { marginTop: '12px', pointerEvents: 'auto' }, onclick: () => { ui.scope = 'all'; draw(); } }, 'Mostrar todas las tablas')));
         }
         const relEdges = cy.edges().length;
-        stats.textContent = Etch.plural(cy.nodes().length, 'tabla', 'tablas') + ' · ' + Etch.plural(relEdges, 'relación', 'relaciones');
+        stats.textContent = Etch.plural(cy.nodes().length, 'tabla', 'tablas') + ' · ' + Etch.plural(relEdges, 'relación', 'relaciones') + (cy.edges('.inferred').length ? ' (' + cy.edges('.inferred').length + ' probables)' : '');
         if (!set.size) return;
 
         const saved = savedPositions();
@@ -304,9 +331,11 @@
               h('span', { class: 'nm truncate' }, c.name), h('span', { class: 'ty truncate' }, c.type))),
             t.columns.length > 80 ? h('div', { class: 'faint', style: { fontSize: '12px', padding: '4px 6px' } }, '… y ' + (t.columns.length - 80) + ' más en el Explorador') : null,
             t.relations.length ? h('div', { class: 'sec-title' }, 'Referencia a') : null,
-            t.relations.map((r) => h('div', { class: 'mini-col' }, h('span', { class: 'mono faint' }, r.col), icon('arrow', 13), link(r.ref_table))),
+            t.relations.map((r) => h('div', { class: 'mini-col' }, h('span', { class: 'mono faint' }, r.col), icon('arrow', 13), link(r.ref_table),
+              r.inferred ? h('span', { class: 'badge warn', title: r.reason || 'Relación probable' }, 'prob.') : null)),
             t.referenced_by.length ? h('div', { class: 'sec-title' }, 'Referenciada por') : null,
-            t.referenced_by.slice(0, 60).map((r) => h('div', { class: 'mini-col' }, link(r.table), h('span', { class: 'mono faint' }, '.' + r.col)))),
+            t.referenced_by.slice(0, 60).map((r) => h('div', { class: 'mini-col' }, link(r.table), h('span', { class: 'mono faint' }, '.' + r.col),
+              r.inferred ? h('span', { class: 'badge warn', title: 'Relación probable (por nombre)' }, 'prob.') : null))),
           h('div', { class: 'foot2' },
             h('button', { class: 'btn sm primary', onclick: () => Etch.openTable(name) }, icon('table', 14), 'Abrir en el Explorador'),
             ui.scope === 'focus' && ui.focus === name ? null :

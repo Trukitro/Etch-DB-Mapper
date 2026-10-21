@@ -4,12 +4,13 @@
   const Etch = window.Etch;
   const { h, icon, $, clear } = Etch;
 
-  const CONN_VIEWS = ['overview', 'explorer', 'map'];
+  const CONN_VIEWS = ['overview', 'explorer', 'map', 'changes'];
   const FILL_VIEWS = ['explorer', 'map'];
   const TAB_DEFS = [
     ['overview', 'Resumen', 'grid'],
     ['explorer', 'Explorador', 'table'],
     ['map', 'Mapa', 'map'],
+    ['changes', 'Cambios', 'history'],
   ];
   const PHASES = [['connect', 'Conectar'], ['tables', 'Tablas'], ['columns', 'Columnas'], ['keys', 'Claves'], ['relations', 'Relaciones'], ['build', 'Armar']];
 
@@ -19,6 +20,7 @@
     connections: [],
     alias: null, view: 'home', args: {},
     schema: null, schemaAlias: null, schemaLoading: false,
+    update: null, updateBlocked: false,
   });
   let mounted = null;
 
@@ -36,6 +38,7 @@
     if (mounted && mounted.onTheme) mounted.onTheme();
   }
   if (mql && mql.addEventListener) mql.addEventListener('change', () => { if (S.settings.theme === 'system') applyTheme(); });
+  Etch.applyTheme = applyTheme;
   Etch.cycleTheme = function () {
     const order = ['dark', 'light', 'system'];
     S.settings.theme = order[(order.indexOf(S.settings.theme) + 1) % order.length];
@@ -51,6 +54,21 @@
     S.settings[key] = value;
     return Etch.api.save_settings({ [key]: value });
   };
+
+  /* ---------------- versión nueva ---------------- */
+  Etch.setUpdate = function (info) { S.update = info; renderChrome(); };
+  function checkUpdatesLater() {
+    if (S.updateBlocked || !S.settings.check_updates) return;
+    setTimeout(async () => {
+      try {
+        const r = await Etch.api.check_updates(false);
+        if (r && r.ok && r.newer) {
+          Etch.setUpdate(r);
+          Etch.toast('info', 'Hay una versión nueva: ' + r.latest, { detail: 'Tienes la ' + r.current + '. Mira el aviso en la barra lateral.', timeout: 8000 });
+        }
+      } catch (e) { /* sin red: no pasa nada */ }
+    }, 4000);
+  }
 
   /* ---------------- render ---------------- */
   function renderTopbar() {
@@ -109,6 +127,8 @@
       h('p', { class: 'muted', style: { margin: '0 0 12px' } }, failed
         ? 'La conexión sigue guardada, no hace falta volver a escribirla. Revisá el detalle, corregí la URI si hace falta y reintentá.'
         : 'La conexión está guardada. Escaneala para leer sus tablas, columnas y relaciones.'),
+      c.secret_error ? h('div', { class: 'banner bad' }, icon('alert', 18), h('div', { class: 'grow' }, h('b', null, 'No se pudo descifrar la contraseña. '),
+        'La conexión se guardó con otro usuario de Windows u otro equipo. Edítala y vuelve a escribir la contraseña.')) : null,
       failed && c.last_error ? h('pre', { class: 'mono', style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px', margin: '0 0 12px', fontSize: '12.5px', color: 'var(--bad)' } }, c.last_error) : null,
       h('div', { class: 'faint mono truncate', style: { marginBottom: '14px', fontSize: '12px' }, title: c.masked_uri }, c.masked_uri),
       h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '8px' } },
@@ -242,6 +262,9 @@
     if (e.ok) {
       const c = e.connection;
       Etch.toast('success', 'Escaneo completo: ' + e.alias, { detail: Etch.plural(c.table_count, 'tabla', 'tablas') + ' · ' + Etch.plural(c.relation_count, 'relación', 'relaciones') + ' · ' + Etch.fmtDuration(c.duration_sec) });
+      if (e.changes && e.changes.total > 0) {
+        Etch.toast('warning', 'El esquema cambió desde el escaneo anterior', { detail: e.changes.text + '. Míralo en la pestaña Cambios.', timeout: 9000 });
+      }
       if (S.alias === e.alias) { S.schema = null; S.schemaAlias = null; }
     } else {
       Etch.toast('error', 'No se pudo escanear «' + e.alias + '»', { detail: e.message || e.connection.last_error, timeout: 12000 });
@@ -285,7 +308,7 @@
       if (S.alias) Etch.scan(S.alias);
       return;
     }
-    if (e.altKey && ['1', '2', '3'].includes(e.key)) {
+    if (e.altKey && ['1', '2', '3', '4'].includes(e.key)) {
       const c = conn();
       if (c && c.has_data) { e.preventDefault(); Etch.go(TAB_DEFS[Number(e.key) - 1][0]); }
       return;
@@ -313,7 +336,7 @@
       $('#view').append(h('div', { class: 'page' }, h('div', { class: 'card' }, h('h2', null, 'No se pudo iniciar la aplicación'), h('pre', { class: 'mono' }, String(e && e.message || e)))));
       return;
     }
-    Object.assign(S, { version: boot.version, repoUrl: boot.repo_url, platform: boot.platform, dataDir: boot.data_dir });
+    Object.assign(S, { version: boot.version, repoUrl: boot.repo_url, platform: boot.platform, dataDir: boot.data_dir, updateBlocked: !!boot.update_check_blocked });
     Object.assign(S.settings, boot.settings);
     S.connections = boot.connections || [];
     applyTheme();
@@ -340,6 +363,7 @@
       Etch.toast('info', 'Etch-DB-Mapper se actualizó a v' + S.version, { detail: 'Mirá las novedades en la barra lateral.', timeout: 7000 });
     }
     if (S.settings.seen_version !== S.version) Etch.saveSetting('seen_version', S.version);
+    checkUpdatesLater();
   }
   init();
 })();

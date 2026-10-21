@@ -63,8 +63,10 @@
 
         m.relation_count === 0 && m.table_count > 0 ? h('div', { class: 'banner' }, icon('info', 18),
           h('div', { class: 'grow' }, h('b', null, 'Esta base no declara claves foráneas. '),
-            'Las relaciones solo se dibujan si están definidas como FOREIGN KEY en la base; es común en bases antiguas, donde el vínculo existe solo por convención (por ejemplo, una columna ',
-            h('code', null, 'ClientID'), '). El Explorador y la búsqueda funcionan igual.')) : null,
+            'Las relaciones reales solo se dibujan si están definidas como FOREIGN KEY; es común en bases antiguas, donde el vínculo existe solo por convención (por ejemplo, una columna ',
+            h('code', null, 'ClientID'), '). Abajo se muestran las relaciones probables que se pueden deducir por nombre.')) : null,
+
+        inferredBanner(sc),
 
         h('div', { class: 'grid two' },
           h('div', { class: 'card' }, h('h3', null, 'Tablas más conectadas'),
@@ -97,6 +99,19 @@
             h('button', { class: 'btn', onclick: () => exportJson(sc, S.alias) }, icon('download', 16), 'Exportar esquema (JSON)')))));
     },
   };
+
+  function inferredBanner(sc) {
+    const inf = sc.inferred || [];
+    if (!inf.length) return null;
+    const high = inf.filter((r) => r.confidence === 'high').length;
+    const on = !!Etch.state.settings.map_show_inferred;
+    return h('div', { class: 'banner' }, icon('zap', 18),
+      h('div', { class: 'grow' }, h('b', null, Etch.plural(inf.length, 'relación probable', 'relaciones probables') + ' por nombre. '),
+        'La base no las declara como clave foránea, pero los nombres y tipos sugieren que existen' + (high ? ' (' + high + ' con alta confianza)' : '') +
+        '. Son sugerencias: se dibujan con línea punteada y no cambian nada en tu base.'),
+      h('button', { class: 'btn sm', onclick: async () => { if (!on) await Etch.saveSetting('map_show_inferred', true); Etch.go('map'); } },
+        icon('map', 15), on ? 'Ver en el mapa' : 'Mostrar en el mapa'));
+  }
 
   function kv(k, v, mono) {
     return h('div', { style: { minWidth: 0 } }, h('div', { class: 'faint', style: { fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700 } }, k),

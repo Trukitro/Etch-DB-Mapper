@@ -314,6 +314,7 @@
     if (existing) {
       const r = await Etch.api.parse_uri(existing.uri);
       if (r.ok) { fill(r.fields); start = 'wizard'; } else { uri.value = existing.uri; start = 'adv'; }
+      if (existing.secret_error) { pass.value = ''; err.textContent = 'La contraseña guardada no se pudo descifrar (otro usuario o equipo de Windows). Escríbela de nuevo.'; }
     }
     if (!start) { typeSel.value = 'postgres'; start = 'wizard'; }
     if (start === 'adv') { mode = 'wizard'; uri.value = existing.uri; await setMode('adv'); }

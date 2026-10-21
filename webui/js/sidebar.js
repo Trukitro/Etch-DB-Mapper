@@ -91,8 +91,11 @@
           ? S.connections.map(connItem)
           : h('div', { class: 'faint', style: { padding: '10px 12px', fontSize: '12.5px' } }, 'Todavía no guardaste ninguna conexión.')),
       h('div', { class: 'foot' },
+        S.update ? h('button', { class: 'update-note', title: 'Abrir la página del release en tu navegador', onclick: () => Etch.api.open_external(S.update.url) },
+          h('b', null, 'Versión ' + S.update.latest + ' disponible'), h('span', { class: 'muted' }, 'Tienes la ' + S.update.current + ' · clic para descargar')) : null,
         navbtn('help', 'Ayuda', 'help'),
         navbtn('file', 'Novedades', 'changelog'),
+        h('button', { class: 'btn ghost navbtn', onclick: () => Etch.dialogs.preferences(), title: 'Preferencias' }, icon('settings', 17), h('span', { class: 'label' }, 'Preferencias')),
         h('div', { class: 'row', style: { justifyContent: 'space-between', padding: '2px 4px 0' } },
           h('button', { class: 'btn ghost sm', title: THEME_LABEL[S.settings.theme] + ' (clic para cambiar)', 'aria-label': 'Cambiar tema',
             onclick: () => Etch.cycleTheme() }, icon(THEME_ICON[S.settings.theme] || 'moon', 16), h('span', { class: 'label' }, THEME_LABEL[S.settings.theme])),

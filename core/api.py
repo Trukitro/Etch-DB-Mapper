@@ -13,15 +13,21 @@ Convenciones
 import base64
 import json
 import logging
+import os
+import subprocess
 import sys
 import threading
 import time
 import webbrowser
 from datetime import datetime
 
+from . import updates
 from . import uri as uri_tools
 from .demo import DEMO_ALIAS, create_demo_db
+from .diff import describe, diff_schemas
+from .inference import infer_relations
 from .paths import resource_path
+from .storage import compact_schema
 from .scanner import (
     check_driver_available, compute_meta, detect_engine, finalize_schema, inspect_uri, mask_uri, run_db_scan,
     summarize_error, test_connection,
@@ -62,8 +68,9 @@ class Api:
 
     def _summary(self, alias: str, entry: dict) -> dict:
         meta = entry.get("meta")
-        if not meta and entry.get("data"):
-            meta = entry["meta"] = compute_meta(finalize_schema(entry["data"]))  # caché en memoria
+        if not meta and entry.get("data"):   # historiales 1.x sin 'meta': se calcula una vez y se guarda
+            meta = compute_meta(finalize_schema(entry["data"]))
+            self._store.update(alias, meta=meta)
         meta = meta or {}
         with self._lock:
             scan = dict(self._scans.get(entry["id"], {})) or None
@@ -80,6 +87,7 @@ class Api:
             "table_count": meta.get("table_count", 0),
             "relation_count": meta.get("relation_count", 0),
             "has_data": bool(entry.get("data")),
+            "secret_error": bool(entry.get("secret_error")),
             "scan": scan,
         }
 
@@ -100,6 +108,8 @@ class Api:
             "platform": sys.platform,
             "data_dir": str(self._store.dir),
             "settings": self._store.settings(),
+            "security": self._store.security_status(),
+            "update_check_blocked": updates.disabled_by_env(),
             "connections": self.list_connections(),
             "warnings": list(self._store.load_warnings),
         }
@@ -167,7 +177,7 @@ class Api:
         entry = self._store.get(alias)
         if not entry:
             return {"ok": False, "error": "La conexión ya no existe."}
-        return {"ok": True, "alias": alias, "uri": entry.get("uri", "")}
+        return {"ok": True, "alias": alias, "uri": entry.get("uri", ""), "secret_error": bool(entry.get("secret_error"))}
 
     def save_connection(self, alias: str, uri: str, previous_alias: str = None) -> dict:
         """Crea o edita una conexión y la guarda YA (antes de escanear), así
@@ -238,6 +248,9 @@ class Api:
         entry = self._store.get(alias)
         if not entry:
             return {"ok": False, "error": "La conexión ya no existe."}
+        if entry.get("secret_error"):
+            return {"ok": False, "error": "No se pudo descifrar la contraseña guardada (¿otro usuario de Windows o "
+                                           "otro equipo?). Editá la conexión y volvé a escribirla."}
         conn_id = entry["id"]
         with self._lock:
             self._counter += 1
@@ -283,7 +296,9 @@ class Api:
             self._scans.pop(conn_id, None)
         if alias is None:
             return
+        changes = None
         if result["status"] == "success":
+            changes = self._record_version(alias, conn_id, result)
             self._store.update(
                 alias, status="success", data=result["data"], meta=result["meta"],
                 last_scan=result["last_scan"], duration_sec=result["duration_sec"], last_error=None,
@@ -291,9 +306,30 @@ class Api:
         else:
             self._store.update(alias, status="error", last_error=result["message"])
         self._emit("scan_finished", {
-            "alias": alias, "id": conn_id, "ok": result["status"] == "success",
+            "alias": alias, "id": conn_id, "ok": result["status"] == "success", "changes": changes,
             "message": result.get("message"), "connection": self._summary(alias, self._store.get(alias)),
         })
+
+    def _record_version(self, alias: str, conn_id: str, result: dict):
+        """Guarda el esquema como una versión del historial y devuelve el resumen de
+        cambios respecto de la versión anterior (None si es el primer escaneo).
+        Un fallo acá nunca debe tirar abajo el escaneo."""
+        try:
+            old = self._store.get(alias)
+            if not self._store.has_snapshots(conn_id) and old.get("data"):
+                # conexión anterior a 2.2: su esquema guardado pasa a ser la versión base
+                self._store.add_snapshot(conn_id, finalize_schema(old["data"]), old.get("last_scan") or "")
+            had_history = self._store.has_snapshots(conn_id)
+            is_new, previous = self._store.add_snapshot(conn_id, result["data"], result["last_scan"])
+            if not had_history:
+                return None
+            if not is_new:
+                return {"total": 0, "text": "sin cambios"}
+            summary = diff_schemas(previous["tables"], compact_schema(result["data"]))["summary"]
+            return {**summary, "text": describe(summary)}
+        except Exception:
+            log.exception("No se pudo registrar la versión del esquema")
+            return None
 
     # --------------------------------------------------------------- datos
     def get_schema(self, alias: str) -> dict:
@@ -301,6 +337,9 @@ class Api:
         if not entry:
             return {"ok": False, "error": "La conexión ya no existe."}
         tables = finalize_schema(entry.get("data") or {})
+        meta = compute_meta(tables)
+        inferred = infer_relations(tables)
+        meta["inferred_count"] = len(inferred)
         return {
             "ok": True,
             "alias": alias,
@@ -310,9 +349,66 @@ class Api:
             "duration_sec": entry.get("duration_sec", 0),
             "last_error": entry.get("last_error"),
             "tables": tables,
-            "meta": compute_meta(tables),
+            "meta": meta,
+            "inferred": inferred,
+            "versions": len(self._store.list_snapshots(entry["id"])),
             "map": entry.get("map") or {},
         }
+
+    # ----------------------------------------------- historial y comparación
+    def list_versions(self, alias: str) -> dict:
+        entry = self._store.get(alias)
+        if not entry:
+            return {"ok": False, "error": "La conexión ya no existe."}
+        return {"ok": True, "versions": self._store.list_snapshots(entry["id"])}
+
+    def compare_versions(self, alias: str, newer: int = 0, older: int = 1) -> dict:
+        """Compara dos versiones del historial (0 = la más nueva)."""
+        entry = self._store.get(alias)
+        if not entry:
+            return {"ok": False, "error": "La conexión ya no existe."}
+        a, b = self._store.get_snapshot(entry["id"], int(older)), self._store.get_snapshot(entry["id"], int(newer))
+        if a is None or b is None:
+            return {"ok": False, "error": "Todavía no hay dos versiones para comparar."}
+        return {"ok": True, "older": {"index": int(older), "at": a["at"]}, "newer": {"index": int(newer), "at": b["at"]},
+                "diff": diff_schemas(a["tables"], b["tables"])}
+
+    # ------------------------------------------------- seguridad y versiones
+    def security_status(self) -> dict:
+        return self._store.security_status()
+
+    def check_updates(self, force: bool = False) -> dict:
+        """Busca una versión nueva en GitHub (ver core/updates.py). Sin `force` respeta el
+        ajuste del usuario y consulta como máximo una vez al día."""
+        settings = self._store.settings()
+        if updates.disabled_by_env():
+            return {"ok": False, "skipped": True, "error": "Desactivado por la variable ETCH_NO_UPDATE_CHECK."}
+        if not force:
+            if not settings.get("check_updates"):
+                return {"ok": False, "skipped": True, "error": "Búsqueda automática desactivada."}
+            last = settings.get("last_update_check") or ""
+            try:
+                if last and (datetime.now() - datetime.fromisoformat(last)).total_seconds() < 24 * 3600:
+                    return {"ok": False, "skipped": True, "error": "Ya se consultó hoy."}
+            except ValueError:
+                pass
+        result = updates.check_latest()
+        if result["ok"]:
+            self._store.patch_settings({"last_update_check": datetime.now().isoformat(timespec="seconds")})
+        return result
+
+    def open_data_folder(self) -> dict:
+        folder = str(self._store.dir)
+        try:
+            if sys.platform == "win32":
+                os.startfile(folder)   # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "path": folder}
 
     def save_map_state(self, alias: str, state: dict) -> dict:
         if not self._store.exists(alias) or not isinstance(state, dict):

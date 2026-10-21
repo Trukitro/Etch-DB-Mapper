@@ -112,14 +112,32 @@
       last_error: e.last_error, table_count: m.table_count, relation_count: m.relation_count, has_data: !!Object.keys(e.data).length, scan: s ? { ...s } : null };
   };
   const list = () => Object.keys(store).map(summary);
+  /* inferencia simplificada (la real es core/inference.py) */
+  function inferMock(t) {
+    const names = Object.keys(t), out = [];
+    const pkOwner = {};
+    names.forEach((n) => { const pks = t[n].columns.filter((c) => c.pk); if (pks.length === 1) (pkOwner[pks[0].name.toLowerCase()] = pkOwner[pks[0].name.toLowerCase()] || []).push(n); });
+    const norm = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+    names.forEach((n) => t[n].columns.forEach((c) => {
+      if (c.pk || t[n].relations.some((r) => r.col === c.name)) return;
+      const owners = pkOwner[c.name.toLowerCase()];
+      if (owners && owners.length === 1 && owners[0] !== n && c.name.toLowerCase() !== 'id') { out.push({ table: n, col: c.name, ref_table: owners[0], ref_col: c.name, confidence: 'high', reason: 'Misma columna que la clave primaria de ' + owners[0] }); return; }
+      const m = /^(.*?)(id|key|cod|codigo|ref)\d*$/i.exec(c.name);
+      if (!m || m[1].length < 3) return;
+      const stem = norm(m[1].replace(/_$/, ''));
+      const hits = names.filter((x) => x !== n && norm(x.split('_').slice(-1)[0]) === stem);
+      if (hits.length === 1 && t[hits[0]].columns.some((x) => x.pk)) out.push({ table: n, col: c.name, ref_table: hits[0], ref_col: t[hits[0]].columns.find((x) => x.pk).name, confidence: 'medium', reason: 'El nombre de la columna apunta a la tabla ' + hits[0] });
+    }));
+    return out;
+  }
   const delay = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms));
   const checkAlias = (a) => (!a ? 'Poné un nombre para la conexión.' : a.length > 60 ? 'El nombre es demasiado largo (máximo 60 caracteres).' : null);
 
   /* ---------- API ---------- */
   window.EtchMockApi = {
     async bootstrap() {
-      return { app_name: 'Etch-DB-Mapper', version: '2.1.0', repo_url: 'https://github.com/Trukitro/Etch-DB-Mapper', platform: 'dev',
-        data_dir: '(modo desarrollo: datos simulados en memoria)', settings: { theme: localStorage.getItem('etch-dev-theme') || 'dark', sidebar_collapsed: false, map_layout: 'fcose', map_include_orphans: false, last_alias: '', seen_version: '2.1.0' },
+      return { app_name: 'Etch-DB-Mapper', version: '2.2.0', repo_url: 'https://github.com/Trukitro/Etch-DB-Mapper', platform: 'dev',
+        data_dir: '(modo desarrollo: datos simulados en memoria)', settings: { theme: localStorage.getItem('etch-dev-theme') || 'dark', sidebar_collapsed: false, map_layout: 'fcose', map_include_orphans: false, last_alias: '', seen_version: '2.2.0', check_updates: true, map_show_inferred: false },
         connections: list(), warnings: [] };
     },
     async save_settings(p) { if (p && p.theme) { try { localStorage.setItem('etch-dev-theme', p.theme); } catch (e) { /* nada */ } } return { ok: true, settings: p }; },
@@ -233,9 +251,30 @@
       const e = store[alias]; if (!e) return { ok: false, error: 'La conexión ya no existe.' };
       await delay(80);
       const tables = finalize(e.data);
-      return { ok: true, alias, engine: engineOf(e.uri), status: e.status, last_scan: e.last_scan, duration_sec: e.duration_sec, last_error: e.last_error, tables, meta: metaOf(tables), map: e.map || {} };
+      const inferred = inferMock(tables);
+      return { ok: true, alias, engine: engineOf(e.uri), status: e.status, last_scan: e.last_scan, duration_sec: e.duration_sec, last_error: e.last_error, tables,
+        meta: Object.assign(metaOf(tables), { inferred_count: inferred.length }), inferred, versions: 2, map: e.map || {} };
     },
     async save_map_state(alias, state) { if (store[alias]) store[alias].map = state; return { ok: !!store[alias] }; },
+    async list_versions() {
+      return { ok: true, versions: [{ index: 0, at: '2026-10-21 09:30:00', last_seen: '2026-10-21 09:30:00', tables: 17, columns: 60, relations: 21 },
+        { index: 1, at: '2026-10-14 18:02:10', last_seen: '2026-10-20 08:00:00', tables: 16, columns: 56, relations: 19 }] };
+    },
+    async compare_versions() {
+      await delay(250);
+      return { ok: true, older: { index: 1, at: '2026-10-14 18:02:10' }, newer: { index: 0, at: '2026-10-21 09:30:00' }, diff: {
+        added_tables: [{ name: 'loyalty_cards', columns: 5, relations: 1 }], removed_tables: [{ name: 'newsletter_queue_old', columns: 3, relations: 0 }],
+        changed_tables: { customers: { added_columns: [{ name: 'phone', type: 'varchar(30)', null: true, pk: false }], removed_columns: [], modified_columns: [{ name: 'email', changes: { type: ['varchar(80)', 'varchar(120)'] } }], added_relations: [], removed_relations: [] },
+          orders: { added_columns: [{ name: 'coupon_id', type: 'int', null: true, pk: false }], removed_columns: [{ name: 'notes', type: 'text' }], modified_columns: [{ name: 'status', changes: { null: [true, false] } }], added_relations: [['coupon_id', 'coupons', 'coupon_id']], removed_relations: [] } },
+        summary: { added_tables: 1, removed_tables: 1, changed_tables: 2, added_columns: 2, removed_columns: 1, modified_columns: 2, added_relations: 1, removed_relations: 0, total: 8 } } };
+    },
+    async security_status() { return { name: 'dpapi', available: true, label: 'Cifradas con Windows (DPAPI), ligadas a tu usuario y a este equipo.', connections_with_password: 2, encrypted: 2 }; },
+    async check_updates(force) {
+      await delay(400);
+      return /[?&]update=1/.test(location.search) ? { ok: true, current: '2.2.0', latest: '9.9.9', newer: true, url: 'https://github.com/Trukitro/Etch-DB-Mapper/releases/latest' }
+        : (force ? { ok: true, current: '2.2.0', latest: '2.2.0', newer: false, url: '' } : { ok: false, skipped: true, error: 'Ya se consultó hoy.' });
+    },
+    async open_data_folder() { return { ok: true, path: '(modo desarrollo)' }; },
     async pick_file() { return { ok: false }; },
     async save_file(name, content, encoding) {
       const blob = encoding === 'base64' ? new Blob([Uint8Array.from(atob(content), (ch) => ch.charCodeAt(0))]) : new Blob([content], { type: 'text/plain' });

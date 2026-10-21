@@ -160,6 +160,16 @@
       h('div', { class: 'sec-title' }, title, h('span', { class: 'badge' }, String(list.length))),
       list.length ? h('div', { class: 'rel' }, list.map(render)) : h('div', { class: 'muted', style: { fontSize: '13px' } }, 'Ninguna.'));
 
+    const inferred = (S.schema.inferred || []);
+    const outgoing = inferred.filter((r) => r.table === key), incoming = inferred.filter((r) => r.ref_table === key);
+    const confBadge = (r) => h('span', { class: 'badge ' + (r.confidence === 'high' ? 'good' : 'warn'), title: r.reason }, r.confidence === 'high' ? 'alta' : 'media');
+    const probable = (outgoing.length || incoming.length) ? h('div', null,
+      h('div', { class: 'sec-title' }, 'Relaciones probables (por nombre)', h('span', { class: 'badge' }, String(outgoing.length + incoming.length))),
+      h('p', { class: 'muted', style: { margin: '0 0 8px', fontSize: '12.5px' } }, 'La base no declara estas claves foráneas; se deducen de los nombres y tipos de las columnas. Son sugerencias.'),
+      h('div', { class: 'rel' },
+        outgoing.map((r) => h('div', { class: 'r', title: r.reason }, h('span', { class: 'mono' }, r.col), h('span', { class: 'arrow' }, icon('arrow', 14)), tableLink(r.ref_table), h('span', { class: 'faint mono' }, '.' + r.ref_col), confBadge(r))),
+        incoming.map((r) => h('div', { class: 'r', title: r.reason }, tableLink(r.table), h('span', { class: 'faint mono' }, '.' + r.col), h('span', { class: 'arrow' }, icon('arrow', 14)), h('span', { class: 'mono' }, r.ref_col), confBadge(r))))) : null;
+
     const copy = async (text, what) => { (await Etch.copyText(text)) ? Etch.toast('success', what + ' copiado', { timeout: 1800 }) : Etch.toast('error', 'No se pudo copiar al portapapeles'); };
 
     return h('div', { class: 'detail' },
@@ -189,6 +199,7 @@
         relCard('Referencia a', t.relations, (r) => h('div', { class: 'r' },
           h('span', { class: 'mono' }, r.col), h('span', { class: 'arrow' }, icon('arrow', 14)), tableLink(r.ref_table), r.ref_col ? h('span', { class: 'faint mono' }, '.' + r.ref_col) : null)),
         relCard('Referenciada por', t.referenced_by, (r) => h('div', { class: 'r' },
-          tableLink(r.table), h('span', { class: 'faint mono' }, '.' + r.col), h('span', { class: 'arrow' }, icon('arrow', 14)), h('span', { class: 'mono' }, r.ref_col || key)))));
+          tableLink(r.table), h('span', { class: 'faint mono' }, '.' + r.col), h('span', { class: 'arrow' }, icon('arrow', 14)), h('span', { class: 'mono' }, r.ref_col || key)))),
+      probable);
   }
 })();
