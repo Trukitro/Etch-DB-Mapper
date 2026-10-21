@@ -98,6 +98,23 @@ def js(window, code, wait=0.8):
     return r
 
 
+def export_report(api, alias):
+    """Informe HTML interactivo + captura con Edge sin ventana (si Edge está instalado)."""
+    import subprocess
+    r = api.export_docs(alias, "html")
+    html_path = DATA / "informe.html"
+    html_path.write_text(r["content"], encoding="utf-8")
+    for exe in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"):
+        if os.path.exists(exe):
+            OUT.mkdir(parents=True, exist_ok=True)
+            subprocess.run([exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--screenshot={OUT / '13-informe-html.png'}",
+                            "--window-size=1360,1000", "--virtual-time-budget=6000", html_path.as_uri()], check=False, timeout=60,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("captura 13-informe-html")
+            return
+    print("Edge no encontrado: sin captura del informe")
+
+
 def script(window, api):
     try:
         time.sleep(3.5)
@@ -120,10 +137,27 @@ def script(window, api):
         api.save_connection("ERP antiguo (sin FKs)", "sqlite://" + str(legacy).replace("\\", "/"))
         js(window, "Etch.refreshConnections().then(()=>Etch.scan('ERP antiguo (sin FKs)'))", 4)
 
-        js(window, "Etch.selectConnection(%s); Etch.go('overview')" % json.dumps(demo_alias), 1.2)
+        # --- documentación de ejemplo (notas, etiquetas, responsables) ---
+        notes = {
+            "customers": ("Personas y empresas que compran en la tienda. Un cliente puede tener varias direcciones.", "Ventas", ["core", "clientes"]),
+            "orders": ("Pedidos confirmados. Cada pedido pertenece a un cliente y tiene uno o más artículos.", "Operaciones", ["core", "pedidos"]),
+            "products": ("Catálogo de productos a la venta.", "Catálogo", ["catálogo"]),
+            "payments": ("Cobros asociados a un pedido (tarjeta, transferencia).", "Finanzas", ["finanzas"]),
+        }
+        for table, (note, owner, tags) in notes.items():
+            api.save_annotation(demo_alias, table, None, {"note": note, "owner": owner, "tags": tags})
+        api.save_annotation(demo_alias, "customers", "email", {"note": "Correo único: se usa como usuario de acceso."})
+        api.save_annotation(demo_alias, "orders", "status", {"note": "pendiente, pagado, enviado o cancelado."})
+        # las notas se guardaron por la API (no por la UI): se descarta el esquema en caché para releerlas
+        js(window, "Etch.state.schema = null; Etch.state.schemaAlias = null; Etch.selectConnection(%s); Etch.go('overview')" % json.dumps(demo_alias), 1.6)
         shot("02-resumen")
         js(window, "Etch.go('explorer',{table:'orders'})", 1.2)
         shot("03-explorador")
+        js(window, "Etch.go('explorer',{table:'customers'})", 1.2)
+        shot("11-documentacion")
+        js(window, "Etch.go('paths',{from:'order_items'}); setTimeout(()=>{const t=document.querySelector('[aria-label=\"Tabla de destino\"]'); t.value='customers'; t.dispatchEvent(new Event('change'));}, 400)", 1.8)
+        shot("12-rutas")
+        export_report(api, demo_alias)
         js(window, "Etch.go('map')", 2.5)
         shot("04-mapa")
 

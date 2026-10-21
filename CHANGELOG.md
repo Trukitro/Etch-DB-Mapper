@@ -2,6 +2,20 @@
 
 Historial de cambios de Etch-DB-Mapper. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen [SemVer](https://semver.org/lang/es/).
 
+## [2.3.0] - 2026-10-21
+
+Versión «documental»: la app ahora sirve también para documentar y compartir lo que descubre.
+
+### Nuevo
+- **Diccionario de datos**: notas, etiquetas y responsable por tabla y notas por columna, guardados en tu equipo (sobreviven a los reescaneos). Búsqueda por documentación y filtro *Sin documentar*. El Resumen muestra el avance.
+- **Descripciones nativas de la base**: se leen automáticamente (`COMMENT ON` en PostgreSQL, `MS_Description` en SQL Server, `COMMENT` en MySQL) y se muestran junto a tus notas. Es una consulta de solo lectura opcional: si el usuario no tiene permiso, el escaneo sigue igual.
+- **Exportar el diccionario**: Markdown, Excel (CSV) e **informe HTML interactivo de un solo archivo** con el mapa incluido, para compartir sin instalar la app. Todo texto se escapa; no incluye datos de tablas ni credenciales.
+- **Pestaña Rutas** (`Alt+5`): camino entre dos tablas por claves foráneas (y relaciones probables) con el **SQL del JOIN** para SQL Server, PostgreSQL, MySQL y SQLite; se puede resaltar en el mapa.
+- Botón **Camino hasta…** en el Explorador.
+
+### Cambiado
+- El escaneo suma una consulta opcional para las descripciones de la base (5 en total en lugar de 4).
+
 ## [2.2.0] - 2026-10-21
 
 ### Seguridad

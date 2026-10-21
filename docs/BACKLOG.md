@@ -4,7 +4,7 @@ Mejoras planeadas, sin fecha fija. Mover a "En progreso"/"Hecho" a mano según s
 vaya trabajando.
 
 ## Alta prioridad
-- [ ] **Verificar el scanner contra bases reales con 2.0.0**: la consulta nativa
+- [ ] **Verificar el scanner contra bases reales** (FKs de SQL Server, lectores de MySQL y las consultas de comentarios de SQL Server/MySQL de 2.3.0): la consulta nativa
       de FKs de SQL Server (`sys.foreign_key_columns`) y los lectores de
       PostgreSQL/MySQL están probados con SQLite y revisados a mano, pero hay
       que confirmarlos contra servidores reales (ver `BUGS.md` #19).
@@ -163,3 +163,16 @@ vaya trabajando.
 - [x] Historial de versiones del esquema y pestaña **Cambios** con resumen en Markdown.
 - [x] Aviso de versión nueva opcional y pantalla de **Preferencias**.
 - [x] Capturas en el README generadas con la app real (`tools/capture_screenshots.py`).
+
+### 2.3.0 — documental
+- [x] Diccionario de datos: notas, etiquetas y responsable por tabla; notas por columna; búsqueda y filtro *Sin documentar*.
+- [x] Lectura de descripciones nativas (PostgreSQL, SQL Server, MySQL).
+- [x] Exportar a Markdown, CSV e informe HTML interactivo autocontenido.
+- [x] Pestaña Rutas: camino entre dos tablas y generador de JOIN; resaltado en el mapa.
+
+### Ideas siguientes (documental / navegación)
+- [ ] Exportar a Mermaid / PlantUML / DDL completo.
+- [ ] Informe HTML con tema claro/oscuro seleccionable y filtro por etiqueta.
+- [ ] Importar/exportar las notas (JSON) para compartirlas entre equipos o conexiones.
+- [ ] «Dónde se usa esta columna»: columnas del mismo nombre en otras tablas.
+- [ ] Revisión de calidad: FK sin índice, columnas del mismo nombre con distinto tipo.

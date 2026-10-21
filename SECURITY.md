@@ -34,6 +34,10 @@ Por eso recomendamos, además: usar **cuentas de solo lectura** en las bases, no
 
 Solo el catálogo del motor (`INFORMATION_SCHEMA`, `sys.*`, `pragma_*` de SQLite). Son consultas fijas, sin parámetros ni texto tuyo concatenado en el SQL, y un número constante de ellas (no una por tabla). El código está en `core/scanner.py`. La opción *Probar conexión* ejecuta un `SELECT 1`.
 
+## Notas e informes exportados
+
+Las notas, etiquetas y responsables que escribes se guardan en tu carpeta de datos (`annotations/`), nunca en tu base. Los informes exportables (Markdown, CSV, HTML) incluyen **nombres de tablas y columnas, tipos, relaciones y tus notas**, y **nunca** datos de las tablas, URI ni contraseñas; antes de generar el HTML la app te lo recuerda. Aun así, los nombres de tablas y las notas pueden ser información sensible de tu organización: revísalos antes de compartirlos. El informe HTML es autocontenido (sin recursos remotos) y escapa todo texto, de modo que una nota o un nombre de tabla malicioso no puede ejecutar código al abrirlo.
+
 ## Conexiones de red
 
 1. **Tus bases de datos**, a los servidores que tú configures.

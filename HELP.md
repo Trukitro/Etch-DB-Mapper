@@ -61,6 +61,28 @@ Una vista general: cuántas tablas, columnas y relaciones hay, qué tablas está
 - En el detalle de una tabla ves cada columna con su tipo, si admite nulos, y las insignias **PK** (clave primaria) y **FK** (clave foránea). Los nombres de tablas relacionadas son enlaces.
 - Podés **copiar el nombre**, **copiar un DDL aproximado** (`CREATE TABLE …`) o saltar a la tabla en el mapa.
 
+### Documentar tus tablas (diccionario de datos)
+
+En el **Explorador**, cada tabla tiene una tarjeta **Documentación** con una descripción, un **responsable** y **etiquetas**; cada columna tiene su propia descripción (botón ✎). Se guarda al salir del campo, **solo en tu equipo**, y sobrevive a los reescaneos.
+
+- Si la base ya tiene descripciones (`COMMENT ON` en PostgreSQL, `MS_Description` en SQL Server, `COMMENT` en MySQL), las muestra con la marca *base*. Tu nota tiene prioridad sobre la de la base y nunca se escribe en ella.
+- La búsqueda del Explorador también encuentra por nota, etiqueta o responsable, y el filtro **Sin documentar** te lleva a lo que falta.
+- El **Resumen** muestra cuánto está documentado y los botones de exportación.
+
+**Exportar** (Resumen → Documentación):
+
+| Formato | Para qué sirve |
+|---|---|
+| **Markdown** | Pegarlo en un repositorio o wiki. |
+| **Excel (CSV)** | Una fila por columna; se abre directo en Excel. |
+| **Informe HTML** | Un solo archivo con el diccionario y el **mapa interactivo** (con tu disposición del mapa y las relaciones probables). Se abre en cualquier navegador, sin instalar nada: ideal para mandarlo a un colega. |
+
+Los informes contienen **nombres de tablas y columnas, tipos, relaciones y tus notas**. **No** incluyen datos de las tablas, URI ni contraseñas. Revisa el contenido antes de compartirlo.
+
+### Rutas entre tablas
+
+La pestaña **Rutas** responde «¿cómo uno la tabla A con la tabla B?». Elige origen y destino (o usa **Camino hasta…** en el Explorador) y verás los caminos más cortos por claves foráneas, con claves reales primero y, si quieres, también relaciones probables. Cada camino trae el **SQL del JOIN** para copiar y un botón para **resaltarlo en el mapa**. La app solo genera el texto; no ejecuta nada en tu base. Los caminos con relaciones probables llevan una advertencia en el SQL.
+
 ### Cambios
 
 La pestaña **Cambios** compara dos versiones del esquema de la misma conexión. Cada vez que reescaneas y el esquema es distinto, se guarda una versión nueva (se conservan las últimas 8). Verás qué **tablas, columnas y relaciones** se agregaron, quitaron o modificaron (tipo, nulabilidad, clave primaria), con un resumen que puedes copiar en Markdown. Tras un escaneo que encuentra diferencias, la app te avisa. Es ideal para detectar qué cambió en una base entre dos despliegues.
@@ -89,7 +111,7 @@ El mapa dibuja las tablas como nodos y las claves foráneas como flechas (`tabla
 | `Ctrl+N` | Nueva conexión |
 | `Ctrl+K` o `/` | Buscar tablas |
 | `F5` | Reescanear la conexión actual |
-| `Alt+1` … `Alt+4` | Resumen, Explorador, Mapa, Cambios |
+| `Alt+1` … `Alt+5` | Resumen, Explorador, Mapa, Rutas, Cambios |
 | `Ctrl+B` | Mostrar u ocultar la barra lateral |
 | `?` | Abrir esta ayuda |
 | `Esc` | Cerrar diálogos, limpiar la búsqueda |
@@ -134,5 +156,9 @@ El engranaje de la barra lateral abre las **Preferencias**: tema, aviso de versi
 **¿Por qué no veo relaciones en mi base?** Probablemente no declara claves foráneas. Mira el botón **Probables** del mapa y la sección *Relaciones probables* más arriba.
 
 **¿Cómo sé qué cambió en mi base?** Reescanea y abre la pestaña **Cambios**.
+
+**¿Dónde se guardan mis notas?** En tu carpeta de datos (`annotations/`), nunca en la base. Si borras la conexión, se borran con ella.
+
+**¿Cómo comparto el diccionario con alguien que no tiene la app?** Exporta el **Informe HTML** desde el Resumen y mándale el archivo.
 
 **¿Y en Linux o macOS?** El código es multiplataforma y la carpeta de datos sigue las convenciones de cada sistema; el instalador y el empaquetado oficiales por ahora son para Windows. El plan para Linux está en `docs/LINUX_PLAN.md`.

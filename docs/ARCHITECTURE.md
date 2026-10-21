@@ -15,6 +15,7 @@ Aplicación de escritorio en dos capas que se hablan por un puente de pywebview:
 │   ├─ core/secrets.py   Cifrado de contraseñas (DPAPI en Windows)
 │   ├─ core/storage.py   Store: db_maps.json + settings.json + snapshots/ (atómico, id estable)
 │   ├─ core/inference.py Relaciones probables por nombre · core/diff.py Comparación de versiones
+│   ├─ core/joins.py     Caminos entre tablas + SQL de JOIN · core/docs_export.py Diccionario: MD/CSV/HTML
 │   ├─ core/updates.py   Aviso de versión nueva (opcional) · core/logs.py Registro sin contraseñas      │
 │   ├─ core/scanner.py   run_db_scan(uri, progress) → esquema + meta  (pyDAL)               │
 │   └─ core/demo.py, core/paths.py, core/version.py                                         │
@@ -54,6 +55,9 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 | `start_scan(alias)` | Lanza el escaneo en un hilo |
 | `get_schema(alias)` | Esquema normalizado + meta + `inferred` (relaciones probables) + nº de versiones + posiciones del mapa |
 | `list_versions(alias)`, `compare_versions(alias, newer, older)` | Historial de versiones del esquema y su diferencia |
+| `save_annotation(alias, tabla, columna, campos)` | Nota/etiquetas/responsable de una tabla o nota de una columna (se guarda en `annotations/`) |
+| `find_paths(alias, origen, destino, incluir_probables)` | Caminos entre dos tablas + SQL del JOIN |
+| `export_docs(alias, formato)` | Diccionario de datos: `markdown`, `csv` o `html` (informe con mapa) |
 | `security_status()` | Estado del cifrado de contraseñas |
 | `check_updates(force)` | Consulta (opcional) la última versión en GitHub |
 | `open_data_folder()` | Abre la carpeta de datos en el explorador del sistema |
@@ -107,6 +111,13 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 ## Historial de versiones y comparación
 
 Cada escaneo exitoso llama a `Store.add_snapshot()`: guarda el esquema en forma compacta (`compact_schema`) en `snapshots/<id>.json` (últimas 8 versiones, deduplicadas por hash; si el esquema no cambió solo se actualiza `last_seen`). `core/diff.py` compara dos versiones (tablas añadidas/quitadas, columnas añadidas/quitadas/modificadas, relaciones) y `scan_finished` incluye `changes` con el resumen respecto de la versión anterior. Las conexiones previas a 2.2 usan su esquema guardado como versión base.
+
+## Documentación, rutas y exportación
+
+- **Descripciones nativas.** `scanner._comments()` hace una consulta de solo lectura por motor (PostgreSQL `pg_description`, SQL Server `sys.extended_properties` con `MS_Description`, MySQL `*_COMMENT`) y el resultado llega a `table.comment` / `column.comment`. Si falla (permisos, motor sin soporte) devuelve `[]` y el escaneo sigue. Verificada la sintaxis de PostgreSQL contra un servidor real; la de SQL Server y MySQL está revisada pero **sin probar contra servidores reales**.
+- **Notas del usuario.** `Store.set_annotation()` guarda en `annotations/<id>.json` (clave = nombre de tabla/columna, con límites de tamaño). `get_schema` las devuelve en `annotations`. La descripción efectiva es *nota del usuario > comentario de la base*.
+- **Rutas.** `core/joins.py` arma el grafo con las FK (y las relaciones probables si se pide), busca los caminos simples más cortos (con un presupuesto de expansiones para grafos densos) y los ordena: primero los que solo usan claves reales. `join_sql()` cita los identificadores según el motor y califica con el esquema.
+- **Exportación.** `core/docs_export.py` genera Markdown, CSV (con BOM para Excel) e informe HTML. El informe incrusta Cytoscape (de `webui/vendor/`), los datos como JSON inerte (`</` escapado) y escapa con `html.escape` todo texto de la base o del usuario; no usa recursos remotos.
 
 ## Relaciones probables
 

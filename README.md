@@ -19,11 +19,13 @@ Detalle completo —incluido lo que el cifrado **no** puede proteger— en [`SEC
 ## Características
 
 - **Asistente de conexión**: elige el tipo de base (PostgreSQL, SQL Server, MySQL, SQLite), completa servidor, usuario y contraseña, **prueba la conexión** y listo. La URI de pydal sigue disponible para quien la prefiere.
-- **Escaneo rápido**: 4 consultas en total, sin importar cuántas tablas tenga la base (una de 171 tablas pasó de 513 consultas a 4), con progreso por fases.
+- **Escaneo rápido**: un número fijo de consultas (4 más una opcional de descripciones), sin importar cuántas tablas tenga la base (una de 171 tablas pasó de 513 consultas a 4), con progreso por fases.
 - **Mapa relacional** (Cytoscape.js): enfoque al pasar el mouse, panel de detalle, colores por grupo de tablas, alcance «relacionadas / todas / vecindad», varios layouts, posiciones que se recuerdan, exportar a PNG.
 - **Relaciones probables por nombre**: muchas bases antiguas no declaran claves foráneas. La app deduce `Pedidos.ClienteID → Clientes` por nombres y tipos y las dibuja con línea punteada, siempre como *sugerencias* y con interruptor.
 - **Cambios entre escaneos**: cada vez que el esquema cambia se guarda una versión; compáralas y ve qué tablas, columnas y relaciones se agregaron, quitaron o modificaron (con resumen copiable en Markdown).
-- **Explorador** con búsqueda por tabla o columna, filtros, insignias PK/FK y copia de DDL aproximado.
+- **Diccionario de datos**: documenta tus tablas y columnas con notas, etiquetas y responsables (se guardan en tu equipo y sobreviven a los reescaneos). La app también lee las **descripciones que la base ya tiene** (`COMMENT ON`, `MS_Description`, `COMMENT=`). Exporta a **Markdown**, **Excel (CSV)** o a un **informe HTML interactivo de un solo archivo**, con el mapa incluido, para compartir sin que el otro instale nada.
+- **Rutas entre tablas**: «¿cómo uno `Pedidos` con `Conductores`?». Encuentra los caminos por claves foráneas (y relaciones probables) y genera el **SQL del JOIN** listo para copiar, para SQL Server, PostgreSQL, MySQL y SQLite. Solo genera texto: no ejecuta nada.
+- **Explorador** con búsqueda por tabla, columna o nota, filtros (incluido *Sin documentar*), insignias PK/FK y copia de DDL aproximado.
 - **Ayuda y Novedades** dentro de la app, pensadas para usuarios nuevos. Tema oscuro / claro / del sistema, atajos de teclado, 100 % offline.
 
 ## Capturas
@@ -32,7 +34,9 @@ Detalle completo —incluido lo que el cifrado **no** puede proteger— en [`SEC
 |---|---|
 | ![Asistente de conexión](docs/images/08-asistente-conexion.png) **Asistente de conexión** | ![Resumen](docs/images/02-resumen.png) **Resumen del esquema** |
 | ![Relaciones probables](docs/images/06-mapa-relaciones-probables.png) **Relaciones probables** (línea punteada) en una base sin claves foráneas | ![Cambios](docs/images/07-cambios.png) **Cambios entre dos escaneos** |
-| ![Explorador](docs/images/03-explorador.png) **Explorador de tablas** | ![Preferencias y seguridad](docs/images/09-preferencias.png) **Preferencias**: contraseñas cifradas y actualizaciones |
+| ![Documentación](docs/images/11-documentacion.png) **Diccionario de datos**: notas, etiquetas y responsable | ![Rutas](docs/images/12-rutas.png) **Rutas entre tablas** con el SQL del JOIN |
+| ![Informe HTML](docs/images/13-informe-html.png) **Informe HTML** interactivo de un solo archivo | ![Preferencias y seguridad](docs/images/09-preferencias.png) **Preferencias**: contraseñas cifradas y actualizaciones |
+| ![Explorador](docs/images/03-explorador.png) **Explorador de tablas** | |
 
 ## Instalación
 
@@ -53,7 +57,7 @@ Opciones: `--debug` (DevTools con clic derecho → Inspeccionar), `--data-dir RU
 
 1. **Nueva conexión** → nombre, tipo de base y servidor / usuario / contraseña. ¿Prefieres la URI? Pestaña *URI avanzada*, por ejemplo `postgres://usuario:clave@host:5432/base`.
 2. **Probar conexión** y **Guardar y escanear**.
-3. Explora **Resumen**, **Explorador**, **Mapa** y **Cambios**.
+3. Explora **Resumen**, **Explorador**, **Mapa**, **Rutas** y **Cambios**; documenta tus tablas y exporta el diccionario cuando quieras.
 
 Más ejemplos de URI por motor, atajos y solución de problemas: [`HELP.md`](HELP.md) (también dentro de la app, en *Ayuda*). ¿Primera vez? Prueba el botón **Probar con una base de ejemplo**.
 
@@ -68,6 +72,8 @@ core/
   secrets.py          Cifrado de contraseñas (Windows DPAPI)
   storage.py          Persistencia JSON atómica, contraseñas cifradas, historial de versiones
   inference.py        Relaciones probables por nombre
+  joins.py            Caminos entre tablas y generador de JOIN
+  docs_export.py      Diccionario de datos: Markdown, CSV e informe HTML
   diff.py             Comparación de dos versiones del esquema
   updates.py          Aviso de versión nueva (opcional)
   logs.py             Registro sin contraseñas
