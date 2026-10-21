@@ -25,6 +25,8 @@ from datetime import datetime
 
 from pydal import DAL
 
+from .uri import mask_uri  # noqa: F401  (se re-exporta para api.py)
+
 # Prefijo de URI (pydal) -> (módulo Python requerido, cómo instalarlo).
 # módulo None = no requiere driver externo (ej: sqlite, stdlib).
 DRIVER_HINTS = {
@@ -56,11 +58,25 @@ class ScanError(Exception):
 
 
 # ---------------------------------------------------------------- utilidades
+_SECRET_PATTERNS = (
+    (re.compile(r"(?i)(pwd|password|passwd)\s*=\s*[^;&\s]+"), lambda m: m.group(1) + "=••••"),
+    (re.compile(r"(://[^:/@\s]+):[^@\s]+@"), lambda m: m.group(1) + ":••••@"),
+)
+
+
+def scrub_secrets(text: str) -> str:
+    """Quita contraseñas que algún driver pudiera repetir dentro de un mensaje
+    de error (cadenas de conexión tipo PWD=..., o URI con usuario:clave@)."""
+    for pattern, repl in _SECRET_PATTERNS:
+        text = pattern.sub(repl, text)
+    return text
+
+
 def summarize_error(exc) -> str:
     """pydal (y drivers como psycopg2/pyodbc) suelen devolver un traceback
     completo como mensaje. Nos quedamos con la última línea no vacía, que
     es la excepción real."""
-    msg = str(exc).strip()
+    msg = scrub_secrets(str(exc).strip())
     for line in reversed(msg.splitlines()):
         if line.strip():
             return line.strip()
@@ -101,11 +117,6 @@ def inspect_uri(uri: str) -> dict:
         "reader": None if engine is None else ("native" if engine in INTROSPECTORS else "generic"),
         "driver_error": check_driver_available(uri),
     }
-
-
-def mask_uri(uri: str) -> str:
-    """Oculta la contraseña para mostrarla en pantalla/logs."""
-    return re.sub(r"^([a-zA-Z0-9:+]+://)([^:/@]+):(.*)@", r"\1\2:••••@", uri or "", count=1)
 
 
 def _fmt_type(dtype, maxlen=None) -> str:

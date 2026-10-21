@@ -11,6 +11,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from core.api import Api
+from core.logs import SecretScrubFilter
 from core.paths import resource_path
 from core.storage import Store
 from core.version import APP_NAME, __version__
@@ -21,6 +22,7 @@ WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 def _setup_logging(data_dir, debug):
     handler = RotatingFileHandler(data_dir / "etch.log", maxBytes=512_000, backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.addFilter(SecretScrubFilter())   # el log nunca guarda contraseñas
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if debug else logging.INFO)
     root.addHandler(handler)

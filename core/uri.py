@@ -23,6 +23,18 @@ ENGINES = {
 _SCHEME_ENGINE = (("postgres", "postgres"), ("mssql", "mssql"), ("mysql", "mysql"), ("sqlite", "sqlite"))
 
 
+_MASK_RE = re.compile(r"^([a-zA-Z0-9:+]+://)([^:/@]+):(.*)@")
+
+
+def mask_uri(uri: str) -> str:
+    """Oculta la contraseña para mostrarla en pantalla o en logs."""
+    return _MASK_RE.sub(lambda m: m.group(1) + m.group(2) + ":" + "••••" + "@", uri or "", count=1)
+
+
+def has_password(uri: str) -> bool:
+    return bool(_MASK_RE.match(uri or ""))
+
+
 def engine_of_scheme(scheme: str):
     s = (scheme or "").lower()
     for prefix, engine in _SCHEME_ENGINE:
