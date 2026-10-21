@@ -2,6 +2,23 @@
 
 Historial de cambios de Etch-DB-Mapper. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen [SemVer](https://semver.org/lang/es/).
 
+## [2.2.0] - 2026-10-21
+
+### Seguridad
+- **Contraseñas guardadas cifradas** con Windows DPAPI (ligadas a tu usuario y equipo). Las conexiones existentes se cifran solas la primera vez. Si el dato no se puede descifrar (otro usuario o equipo), la app lo detecta y pide escribir la contraseña de nuevo.
+- Los mensajes de error y el registro (`etch.log`) ya no pueden contener contraseñas.
+- Nuevo `SECURITY.md` con el modelo de amenazas, incluido lo que el cifrado no protege. En Linux/macOS la app indica que todavía no cifra.
+
+### Nuevo
+- **Relaciones probables por nombre**: para bases sin claves foráneas, la app deduce relaciones por nombres y tipos (con nivel de confianza) y las muestra con línea punteada en el mapa, en el Resumen y en el Explorador. Son sugerencias y tienen interruptor.
+- **Pestaña Cambios**: compara dos versiones del esquema de una conexión (tablas, columnas, tipos, claves y relaciones), con resumen copiable en Markdown y aviso tras un escaneo con diferencias.
+- **Aviso de versión nueva** (opcional, una consulta pública a GitHub como máximo por día; se apaga en Preferencias o con `ETCH_NO_UPDATE_CHECK=1`).
+- **Preferencias**: tema, actualizaciones, estado del cifrado y acceso a la carpeta de datos. Atajo `Alt+4` para Cambios.
+- Capturas de pantalla en el README (`tools/capture_screenshots.py` las regenera con datos de demostración).
+
+### Cambiado
+- Las URI con contraseña ya no se guardan en claro: en `db_maps.json` queda solo la versión cifrada y una URI con la contraseña oculta. Volver a una versión anterior a la 2.2 requeriría escribir de nuevo las contraseñas.
+
 ## [2.1.1] - 2026-10-21
 
 ### Corregido

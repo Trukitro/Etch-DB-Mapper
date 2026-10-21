@@ -12,7 +12,10 @@ Aplicación de escritorio en dos capas que se hablan por un puente de pywebview:
 ┌───────────────┴──────────────────────────────────────────────────▼───────────────────────┐
 │ core/api.py  (clase Api: métodos públicos = lo que ve JS)                                 │
 │   ├─ core/uri.py       Construir/descomponer URI del asistente de conexión
-│   ├─ core/storage.py   Store: db_maps.json + settings.json (atómico, con id estable)      │
+│   ├─ core/secrets.py   Cifrado de contraseñas (DPAPI en Windows)
+│   ├─ core/storage.py   Store: db_maps.json + settings.json + snapshots/ (atómico, id estable)
+│   ├─ core/inference.py Relaciones probables por nombre · core/diff.py Comparación de versiones
+│   ├─ core/updates.py   Aviso de versión nueva (opcional) · core/logs.py Registro sin contraseñas      │
 │   ├─ core/scanner.py   run_db_scan(uri, progress) → esquema + meta  (pyDAL)               │
 │   └─ core/demo.py, core/paths.py, core/version.py                                         │
 └───────────────────────────────────────────────────────────────────────────────────────────┘
@@ -49,7 +52,11 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 | `rename_connection(old, new)`, `delete_connection(alias)` | Gestión |
 | `create_demo_connection()` | Crea la base SQLite de ejemplo |
 | `start_scan(alias)` | Lanza el escaneo en un hilo |
-| `get_schema(alias)` | Esquema normalizado + meta + posiciones del mapa |
+| `get_schema(alias)` | Esquema normalizado + meta + `inferred` (relaciones probables) + nº de versiones + posiciones del mapa |
+| `list_versions(alias)`, `compare_versions(alias, newer, older)` | Historial de versiones del esquema y su diferencia |
+| `security_status()` | Estado del cifrado de contraseñas |
+| `check_updates(force)` | Consulta (opcional) la última versión en GitHub |
+| `open_data_folder()` | Abre la carpeta de datos en el explorador del sistema |
 | `save_map_state(alias, state)` | Posiciones (saneadas) y layout |
 | `pick_file()`, `save_file(nombre, contenido, encoding)` | Diálogos nativos |
 
@@ -93,6 +100,18 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 4. Si el motor expone un `INFORMATION_SCHEMA` estándar, probablemente no necesites nada: se usa `_introspect_information_schema` para los motores no registrados.
 5. Agregá una prueba en `tests/test_scanner.py`. Para motores sin servidor local, probá la lógica de construcción con filas simuladas.
 
+## Seguridad de las contraseñas
+
+`Store` cifra la URI completa de toda conexión que tenga contraseña (`uri_enc`, con el protector de `core/secrets.py`) y deja en `uri` solo la versión oculta (`usuario:••••@host`). `Store.get()` devuelve una **copia** con la URI descifrada en memoria, así que el resto del código no cambia; si el descifrado falla (otro usuario/equipo) la copia lleva `secret_error: true` y la UI pide volver a escribirla. Las URI antiguas en claro se migran al cargar. Sin protector disponible (Linux/macOS por ahora) no se simula cifrado: `security_status()` lo informa. Detalle y modelo de amenazas: [`../SECURITY.md`](../SECURITY.md).
+
+## Historial de versiones y comparación
+
+Cada escaneo exitoso llama a `Store.add_snapshot()`: guarda el esquema en forma compacta (`compact_schema`) en `snapshots/<id>.json` (últimas 8 versiones, deduplicadas por hash; si el esquema no cambió solo se actualiza `last_seen`). `core/diff.py` compara dos versiones (tablas añadidas/quitadas, columnas añadidas/quitadas/modificadas, relaciones) y `scan_finished` incluye `changes` con el resumen respecto de la versión anterior. Las conexiones previas a 2.2 usan su esquema guardado como versión base.
+
+## Relaciones probables
+
+`core/inference.py::infer_relations(tables)` trabaja sobre el esquema ya leído (sin tocar la base). Reglas: misma columna que una PK única y no genérica → *alta*; nombre de columna sin sufijo (`ID`, `Key`, `Cod`…) que coincide con una tabla (con/sin prefijo, singular/plural) → *media*; tipos compatibles obligatorios; ante varias tablas candidatas se prefiere el mismo prefijo y, si hay empate, se omite. La UI las agrega a `relations` con `inferred: true` y las dibuja punteadas.
+
 ## Almacenamiento
 
 Carpeta de datos (`ETCH_DATA_DIR` o `--data-dir` la reemplazan):
@@ -103,7 +122,7 @@ Carpeta de datos (`ETCH_DATA_DIR` o `--data-dir` la reemplazan):
 | Linux | `$XDG_DATA_HOME/Etch-DB-Mapper` (por defecto `~/.local/share/Etch-DB-Mapper`) |
 | macOS | `~/Library/Application Support/Etch-DB-Mapper` |
 
-Archivos: `db_maps.json` (compatible con 1.x), `settings.json`, `etch.log`, `webview/` (perfil del motor web). Las escrituras son atómicas (archivo temporal + `os.replace`) y, si un JSON está corrupto, se guarda como `*.corrupt-<fecha>` y se avisa en la UI.
+Archivos: `db_maps.json` (compatible con 1.x; las contraseñas van cifradas), `settings.json`, `snapshots/` (historial de versiones), `etch.log`. Las escrituras son atómicas (archivo temporal + `os.replace`) y, si un JSON está corrupto, se guarda como `*.corrupt-<fecha>` y se avisa en la UI.
 
 Cada conexión tiene un `id` estable: permite renombrar sin perder el estado y descartar resultados de escaneos viejos (si se reintenta o se borra la conexión mientras uno corre, el resultado tardío se ignora).
 

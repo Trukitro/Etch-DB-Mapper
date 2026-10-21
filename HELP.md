@@ -36,6 +36,18 @@ Con **Probar conexión** verificás driver, red y credenciales en segundos, sin 
 - Cualquier otro motor que pydal soporte se intenta con el `INFORMATION_SCHEMA` estándar; puede funcionar o no según el motor.
 - Mientras escribís en la pestaña avanzada, la app te avisa si reconoce el motor y si falta instalar el driver.
 
+## Relaciones probables (bases sin claves foráneas)
+
+Muchas bases, sobre todo las antiguas, **no declaran claves foráneas**: el vínculo entre tablas existe solo por convención (por ejemplo, `Pedidos.ClienteID` apunta a `Clientes`). Por eso el mapa podría verse casi vacío aunque la base tenga muchas relaciones.
+
+Etch-DB-Mapper las **deduce por nombre y tipo** y las muestra como *relaciones probables*:
+
+- **Alta confianza**: la columna se llama igual que la clave primaria de otra tabla (`CustomerID` en `Orders` y `Customers.CustomerID`) y los tipos son compatibles.
+- **Media confianza**: el nombre de la columna sin su sufijo (`ID`, `Key`, `Cod`, `Codigo`, `Ref`…) coincide con el nombre de una tabla (con o sin prefijo como `tbl_`, en singular o plural).
+- Si hay varias tablas posibles y no se puede decidir, **no se sugiere nada** (mejor omitir que equivocarse).
+
+Son **sugerencias, no claves foráneas reales**: se dibujan con **línea punteada** (botón *Probables* en la barra del mapa), aparecen en el Resumen y en el detalle de cada tabla, y no cambian nada en tu base.
+
 ## Dónde encontrar la información
 
 ### Resumen
@@ -48,6 +60,10 @@ Una vista general: cuántas tablas, columnas y relaciones hay, qué tablas está
 - **Filtrá** por *Con relaciones*, *Huérfanas* (sin relaciones) o *Sin PK*, y ordená por nombre, columnas o relaciones.
 - En el detalle de una tabla ves cada columna con su tipo, si admite nulos, y las insignias **PK** (clave primaria) y **FK** (clave foránea). Los nombres de tablas relacionadas son enlaces.
 - Podés **copiar el nombre**, **copiar un DDL aproximado** (`CREATE TABLE …`) o saltar a la tabla en el mapa.
+
+### Cambios
+
+La pestaña **Cambios** compara dos versiones del esquema de la misma conexión. Cada vez que reescaneas y el esquema es distinto, se guarda una versión nueva (se conservan las últimas 8). Verás qué **tablas, columnas y relaciones** se agregaron, quitaron o modificaron (tipo, nulabilidad, clave primaria), con un resumen que puedes copiar en Markdown. Tras un escaneo que encuentra diferencias, la app te avisa. Es ideal para detectar qué cambió en una base entre dos despliegues.
 
 ### Mapa
 
@@ -73,17 +89,23 @@ El mapa dibuja las tablas como nodos y las claves foráneas como flechas (`tabla
 | `Ctrl+N` | Nueva conexión |
 | `Ctrl+K` o `/` | Buscar tablas |
 | `F5` | Reescanear la conexión actual |
-| `Alt+1` `Alt+2` `Alt+3` | Resumen, Explorador, Mapa |
+| `Alt+1` … `Alt+4` | Resumen, Explorador, Mapa, Cambios |
 | `Ctrl+B` | Mostrar u ocultar la barra lateral |
 | `?` | Abrir esta ayuda |
 | `Esc` | Cerrar diálogos, limpiar la búsqueda |
 
 ## Tus datos y privacidad
 
-- Las conexiones, los esquemas escaneados y las posiciones del mapa se guardan **solo en tu equipo**.
-- La app no envía información a ningún servidor. Solo abre tu navegador cuando hacés clic en un enlace externo.
-- Las contraseñas se muestran ocultas en pantalla, pero la URI completa se guarda en un archivo local sin cifrar. No compartas esa carpeta.
-- **Windows:** `%LOCALAPPDATA%\Etch-DB-Mapper` · **Linux:** `~/.local/share/Etch-DB-Mapper` · **macOS:** `~/Library/Application Support/Etch-DB-Mapper`.
+- Las conexiones, los esquemas escaneados, el historial de versiones y las posiciones del mapa se guardan **solo en tu equipo**.
+- **Las contraseñas se guardan cifradas** (en Windows, con DPAPI: solo las puede descifrar tu usuario de Windows en este equipo). Puedes comprobarlo en **Preferencias → Seguridad de las contraseñas**. Si copias la carpeta de datos a otro equipo, la app te pedirá escribir la contraseña de nuevo. En Linux/macOS todavía no hay cifrado y la app lo indica allí.
+- La app **no envía tus datos ni tus URI a ningún servidor** y no tiene telemetría. Lo único que sale a internet, además de tus bases, es el **aviso de versión nueva** (opcional): una consulta pública a GitHub como máximo una vez al día. Se apaga en *Preferencias → Actualizaciones*.
+- La app solo lee metadatos del catálogo; nunca el contenido de tus tablas. Usa de todos modos una **cuenta de solo lectura**.
+- **Windows:** `%LOCALAPPDATA%\Etch-DB-Mapper` · **Linux:** `~/.local/share/Etch-DB-Mapper` · **macOS:** `~/Library/Application Support/Etch-DB-Mapper` (botón *Abrir* en Preferencias).
+- Todos los detalles, incluido lo que el cifrado no puede proteger, están en `SECURITY.md` del repositorio.
+
+## Preferencias
+
+El engranaje de la barra lateral abre las **Preferencias**: tema, aviso de versión nueva (con botón *Buscar ahora*), estado del cifrado de contraseñas y acceso a la carpeta de datos.
 
 ## Solución de problemas
 
@@ -107,6 +129,10 @@ El mapa dibuja las tablas como nodos y las claves foráneas como flechas (`tabla
 
 **¿Qué pasa si escaneo de nuevo?** Se reemplaza el esquema guardado por el nuevo. Las posiciones del mapa se mantienen y las tablas nuevas se acomodan solas.
 
-**¿Funciona sin internet?** Sí, todo el mapa y la interfaz son locales.
+**¿Funciona sin internet?** Sí: el mapa y la interfaz son locales. Solo el aviso de versión nueva necesita internet, y falla en silencio si no hay.
+
+**¿Por qué no veo relaciones en mi base?** Probablemente no declara claves foráneas. Mira el botón **Probables** del mapa y la sección *Relaciones probables* más arriba.
+
+**¿Cómo sé qué cambió en mi base?** Reescanea y abre la pestaña **Cambios**.
 
 **¿Y en Linux o macOS?** El código es multiplataforma y la carpeta de datos sigue las convenciones de cada sistema; el instalador y el empaquetado oficiales por ahora son para Windows. El plan para Linux está en `docs/LINUX_PLAN.md`.

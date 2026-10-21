@@ -6,6 +6,8 @@
 - [`../HELP.md`](../HELP.md) — guía de uso paso a paso.
 - [`../CHANGELOG.md`](../CHANGELOG.md) — novedades por versión.
 
+- [`../SECURITY.md`](../SECURITY.md) — seguridad y privacidad: cifrado de contraseñas, red y modelo de amenazas.
+
 **Para quien desarrolla:**
 - [ARCHITECTURE.md](ARCHITECTURE.md) — cómo está armada la app: capas, API,
   formato del esquema, cómo agregar un lector para otro motor.

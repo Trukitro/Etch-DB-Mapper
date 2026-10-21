@@ -12,12 +12,13 @@ vaya trabajando.
       del autor antes de publicar.
 
 ## Media prioridad
-- [ ] **Relaciones inferidas por nombre** (ej. columna `ClienteID` ↔ tabla
+- [x] ~~**Relaciones inferidas por nombre**~~ (hecho en 2.2.0) (ej. columna `ClienteID` ↔ tabla
       `Cliente`): muchas bases antiguas no declaran FKs (en la prueba real,
       121 de 171 tablas quedaban huérfanas). Mostrarlas en el mapa con otro
       estilo (línea punteada) y un interruptor para activarlas.
-- [ ] Cifrar las URI guardadas (Windows Credential Manager / `keyring`) en vez
-      de dejarlas en `db_maps.json` sin cifrar.
+- [x] ~~Cifrar las URI guardadas~~ (hecho en 2.2.0 con DPAPI en Windows).
+- [ ] Cifrado de contraseñas en **Linux/macOS** (libsecret / Keychain vía `keyring`); hoy la app
+      indica que no cifra allí.
 - [ ] Lectores de esquema nativos para más motores (Oracle, Firebird, DB2).
       Hoy se intenta `INFORMATION_SCHEMA` estándar. Ver
       `ARCHITECTURE.md` → «Agregar un lector de esquema».
@@ -25,7 +26,7 @@ vaya trabajando.
 - [ ] Soporte de **Linux** (`LINUX_PLAN.md`): correr desde fuente, CI,
       AppImage / pip.
 - [ ] Internacionalización (hoy la UI está solo en español).
-- [ ] Capturas de pantalla y GIF de uso en el README.
+- [x] ~~Capturas de pantalla en el README~~ (hecho en 2.2.0). Pendiente: un GIF corto de uso.
 
 ## Baja prioridad / exploración
 - [ ] Exportar el mapa también a SVG/PDF (hoy solo PNG).
@@ -33,11 +34,12 @@ vaya trabajando.
       cuando se hace zoom.
 - [ ] Layouts adicionales (radial por tabla central, zonificado por prefijo de
       nombre, p. ej. `ETS_`, `Cat_`).
-- [ ] Comparar dos escaneos de la misma conexión (qué tablas/columnas
-      cambiaron).
+- [x] ~~Comparar dos escaneos de la misma conexión~~ (hecho en 2.2.0, pestaña Cambios).
+- [ ] Detectar **renombres** de tablas/columnas en la comparación (hoy aparecen como quitar + agregar).
 - [ ] Limpiar del historial las posiciones de tablas que ya no existen tras
       un rescan (no rompen nada, solo ocupan espacio).
-- [ ] Instalador con actualización automática / aviso de versión nueva.
+- [x] ~~Aviso de versión nueva~~ (hecho en 2.2.0, opcional). Pendiente: descarga/actualización automática (decisión de seguridad).
+- [ ] Permitir confirmar/descartar relaciones probables y guardarlas por conexión.
 
 ## Hecho
 - [x] Separar el proyecto público del proyecto de trabajo (este repo).
@@ -153,3 +155,11 @@ vaya trabajando.
 - [x] Tests automatizados (`tests/`, 28 pruebas) y `tools/build_windows.ps1`.
 - [x] Carpeta de datos por sistema operativo y plan de Linux
       (`LINUX_PLAN.md`).
+
+### 2.2.0 — seguridad, relaciones probables y cambios
+- [x] Contraseñas cifradas con Windows DPAPI y migración automática (`SECURITY.md`).
+- [x] Filtro de secretos en errores y en `etch.log`.
+- [x] Relaciones probables por nombre (alta/media confianza) en mapa, resumen y explorador.
+- [x] Historial de versiones del esquema y pestaña **Cambios** con resumen en Markdown.
+- [x] Aviso de versión nueva opcional y pantalla de **Preferencias**.
+- [x] Capturas en el README generadas con la app real (`tools/capture_screenshots.py`).

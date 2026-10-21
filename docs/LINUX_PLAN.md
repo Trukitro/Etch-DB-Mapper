@@ -44,11 +44,14 @@ Opciones, de más simple a más completa:
 
 Recomendación: empezar por (1) y un AppImage con GTK del sistema; evaluar `.deb`/Flatpak si hay demanda.
 
-### 4. Integración de escritorio
+### 4. Cifrado de contraseñas
+En Windows las contraseñas se cifran con DPAPI (`core/secrets.py`). En Linux/macOS la app hoy usa un protector "no disponible" y lo indica en *Preferencias*. Plan: agregar un protector basado en `keyring` (libsecret / GNOME Keyring / KWallet en Linux, Keychain en macOS) como dependencia opcional, con el mismo contrato (`protect` / `unprotect`) y migración automática de las URI en claro; si no hay servicio de claves (servidores sin sesión gráfica), mantener el aviso explícito en vez de simular seguridad.
+
+### 5. Integración de escritorio
 - Archivo `.desktop` con icono (`webui/assets/icon.svg` + PNG de 256 px).
 - Verificar el diálogo nativo de archivos (`pick_file`, `save_file`) y `webbrowser.open` (`xdg-open`).
 
-### 5. CI
+### 6. CI
 Un workflow de GitHub Actions con matriz `windows-latest` / `ubuntu-latest` que corra `python -m unittest discover -s tests -t .` en ambos. Las pruebas actuales no usan ventana, así que corren sin entorno gráfico. Una etapa posterior puede lanzar la UI con `xvfb-run` para una prueba de humo.
 
 ## Hoja de ruta propuesta
