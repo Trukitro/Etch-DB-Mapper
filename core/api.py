@@ -24,6 +24,7 @@ from datetime import datetime
 from . import updates
 from . import uri as uri_tools
 from .demo import DEMO_ALIAS, create_demo_db
+from . import docs_export, joins
 from .diff import describe, diff_schemas
 from .inference import infer_relations
 from .paths import resource_path
@@ -352,8 +353,66 @@ class Api:
             "meta": meta,
             "inferred": inferred,
             "versions": len(self._store.list_snapshots(entry["id"])),
+            "annotations": self._store.get_annotations(entry["id"]),
             "map": entry.get("map") or {},
         }
+
+    # ------------------------------------------------ documentación (2.3)
+    def save_annotation(self, alias: str, table: str, column=None, fields=None) -> dict:
+        """Notas/etiquetas/responsable de una tabla (column=None) o nota de una columna."""
+        entry = self._store.get(alias)
+        if not entry:
+            return {"ok": False, "error": "La conexión ya no existe."}
+        try:
+            saved = self._store.set_annotation(entry["id"], table, column, fields or {})
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "annotation": saved}
+
+    def _schema_for(self, alias: str):
+        entry = self._store.get(alias)
+        if not entry or not entry.get("data"):
+            return None, None
+        tables = finalize_schema(entry["data"])
+        return entry, tables
+
+    def find_paths(self, alias: str, source: str, target: str, include_inferred: bool = True) -> dict:
+        """Caminos entre dos tablas por claves foráneas (y relaciones probables) + SQL del JOIN."""
+        entry, tables = self._schema_for(alias)
+        if tables is None:
+            return {"ok": False, "error": "Escanea la conexión primero."}
+        if source not in tables or target not in tables:
+            return {"ok": False, "error": "Elige dos tablas del esquema."}
+        if source == target:
+            return {"ok": False, "error": "Elige dos tablas distintas."}
+        engine = detect_engine(entry.get("uri"))
+        found = joins.find_paths(tables, infer_relations(tables), source, target, bool(include_inferred))
+        return {"ok": True, "paths": [
+            {"steps": p, "length": len(p), "inferred": sum(1 for st in p if st["inferred"]), "sql": joins.join_sql(engine, tables, p)}
+            for p in found]}
+
+    def export_docs(self, alias: str, kind: str) -> dict:
+        """Genera el diccionario de datos: 'markdown', 'csv' o 'html' (informe interactivo)."""
+        entry, tables = self._schema_for(alias)
+        if tables is None:
+            return {"ok": False, "error": "Escanea la conexión primero."}
+        inferred = infer_relations(tables)
+        cards = docs_export.collect(tables, inferred, self._store.get_annotations(entry["id"]))
+        engine = detect_engine(entry.get("uri"))
+        base = "diccionario_" + alias
+        try:
+            if kind == "markdown":
+                return {"ok": True, "filename": docs_export.safe_filename(base, "md"),
+                        "content": docs_export.export_markdown(alias, engine, cards, entry.get("last_scan"))}
+            if kind == "csv":
+                return {"ok": True, "filename": docs_export.safe_filename(base, "csv"), "content": docs_export.export_csv(cards)}
+            if kind == "html":
+                return {"ok": True, "filename": docs_export.safe_filename("informe_" + alias, "html"),
+                        "content": docs_export.export_html(alias, engine, cards, inferred, entry.get("last_scan"),
+                                                           (entry.get("map") or {}).get("positions"))}
+        except OSError as e:   # p. ej. falta algún archivo del paquete
+            return {"ok": False, "error": f"No se pudo generar el informe: {e}"}
+        return {"ok": False, "error": "Formato desconocido."}
 
     # ----------------------------------------------- historial y comparación
     def list_versions(self, alias: str) -> dict:

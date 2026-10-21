@@ -185,7 +185,50 @@ def _introspect_information_schema(db, engine, emit):
         "columns": [(r[0], r[1], r[2], _fmt_type(r[3], r[4]), _yes(r[5])) for r in cols],
         "pks": [(r[0], r[1], r[2]) for r in pks],
         "fks": fks,
+        "comments": _comments(db, engine, flt),
     }
+
+
+def _comments(db, engine, flt):
+    """Descripciones que la propia base ya tiene (COMMENT ON, MS_Description, COMMENT=).
+    Opcional: si el login no puede leerlas o el motor no las soporta, devuelve [] y el
+    escaneo sigue. Una consulta fija más, sin parámetros.
+    -> [(schema, tabla, columna | None, texto)]"""
+    q = db.executesql
+    try:
+        if engine == "postgres":
+            rows = q(
+                "SELECT n.nspname, c.relname, a.attname, d.description FROM pg_description d "
+                "JOIN pg_class c ON c.oid = d.objoid AND d.classoid = 'pg_class'::regclass "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = d.objsubid AND d.objsubid > 0 "
+                f"WHERE c.relkind IN ('r', 'p') AND {flt('n.nspname')}"
+            )
+        elif engine == "mssql":
+            rows = q(
+                "SELECT s.name, t.name, c.name, CAST(ep.value AS NVARCHAR(4000)) FROM sys.extended_properties ep "
+                "JOIN sys.tables t ON t.object_id = ep.major_id JOIN sys.schemas s ON s.schema_id = t.schema_id "
+                "LEFT JOIN sys.columns c ON c.object_id = ep.major_id AND c.column_id = ep.minor_id AND ep.minor_id > 0 "
+                "WHERE ep.class = 1 AND ep.name = 'MS_Description'"
+            )
+        elif engine == "mysql":
+            rows = q(
+                "SELECT TABLE_SCHEMA, TABLE_NAME, NULL, TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES "
+                f"WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_COMMENT <> '' AND {flt('TABLE_SCHEMA')} "
+                "UNION ALL "
+                "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS "
+                f"WHERE COLUMN_COMMENT <> '' AND {flt('TABLE_SCHEMA')}"
+            )
+        else:
+            return []
+    except Exception:   # sin permiso / motor sin esa vista: la documentación nativa es un extra, no un requisito
+        return []
+    out = []
+    for schema, table, column, text in rows:
+        text = (str(text) if text is not None else "").strip()
+        if text:
+            out.append((schema, table, column or None, text[:2000]))
+    return out
 
 
 def _foreign_keys(db, engine, flt):
@@ -253,6 +296,7 @@ def _introspect_sqlite(db, engine, emit):
         "columns": [("main", t, c, (ty or "").lower() or "any", not (nn or pk)) for t, c, ty, nn, pk in cols],
         "pks": [("main", t, c) for t, c, _ty, _nn, pk in cols if pk],
         "fks": resolved,
+        "comments": [],   # SQLite no tiene comentarios de esquema
     }
 
 
@@ -277,7 +321,7 @@ def build_schema(raw) -> dict:
 
     tables = {}
     for schema, name in raw["tables"]:
-        tables[key_of(schema, name)] = {"schema": schema, "name": name, "columns": [], "relations": []}
+        tables[key_of(schema, name)] = {"schema": schema, "name": name, "comment": "", "columns": [], "relations": []}
 
     pk_set = {(s, t, c) for s, t, c in raw["pks"]}
     for schema, table, col, ctype, nullable in raw["columns"]:
@@ -285,7 +329,19 @@ def build_schema(raw) -> dict:
         if entry is None:  # columna de una vista u objeto que no es tabla base
             continue
         is_pk = (schema, table, col) in pk_set
-        entry["columns"].append({"name": col, "type": ctype, "null": bool(nullable) and not is_pk, "pk": is_pk, "fk": False})
+        entry["columns"].append({"name": col, "type": ctype, "null": bool(nullable) and not is_pk, "pk": is_pk, "fk": False, "comment": ""})
+
+    for schema, table, col, text in raw.get("comments", []):
+        entry = tables.get(key_of(schema, table))
+        if entry is None:
+            continue
+        if col is None:
+            entry["comment"] = text
+        else:
+            for c in entry["columns"]:
+                if c["name"] == col:
+                    c["comment"] = text
+                    break
 
     seen = set()
     for schema, table, col, rschema, rtable, rcol in raw["fks"]:
@@ -317,10 +373,12 @@ def finalize_schema(tables: dict) -> dict:
                 "null": null in (True, "YES"),
                 "pk": bool(c.get("pk", c.get("is_pk", False))),
                 "fk": bool(c.get("fk")) or c.get("name") in fk_cols,
+                "comment": c.get("comment", "") or "",
             })
         out[name] = {
             "schema": info.get("schema", ""),
             "name": info.get("name", name),
+            "comment": info.get("comment", "") or "",
             "columns": columns,
             "relations": relations,
             "referenced_by": [],

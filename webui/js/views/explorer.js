@@ -4,7 +4,7 @@
   const Etch = window.Etch;
   const { h, icon, $, clear, debounce } = Etch;
 
-  const FILTERS = [['all', 'Todas'], ['related', 'Con relaciones'], ['orphans', 'Huérfanas'], ['nopk', 'Sin PK']];
+  const FILTERS = [['all', 'Todas'], ['related', 'Con relaciones'], ['orphans', 'Huérfanas'], ['nopk', 'Sin PK'], ['undoc', 'Sin documentar']];
   const SORTS = [['name', 'Nombre'], ['columns', 'Más columnas'], ['relations', 'Más relaciones']];
   const MAX_ROWS = 400;
 
@@ -12,11 +12,28 @@
 
   function degree(t) { return t.relations.length + t.referenced_by.length; }
 
+  /* ---- documentación: nota del usuario > comentario que ya tenía la base ---- */
+  const annTables = () => { const S = Etch.state; S.schema.annotations = S.schema.annotations || { tables: {} }; return S.schema.annotations.tables; };
+  const annOf = (name) => annTables()[name] || {};
+  const descOf = (name, t) => annOf(name).note || t.comment || '';
+  const colNote = (table, col) => ((annOf(table).columns) || {})[col] || '';
+  async function saveAnn(table, column, fields) {
+    const r = await Etch.api.save_annotation(Etch.state.alias, table, column, fields);
+    if (!r.ok) { Etch.toast('error', 'No se pudo guardar la nota', { detail: r.error }); return false; }
+    // el servidor devuelve la ficha completa de la tabla (nota, etiquetas, responsable y notas de columnas)
+    const all = annTables();
+    if (Object.keys(r.annotation).length) all[table] = r.annotation; else delete all[table];
+    return true;
+  }
+
   function matches(name, t, q) {
     if (!q) return { ok: true };
     const ql = q.toLowerCase();
     if (name.toLowerCase().includes(ql)) return { ok: true };
-    const col = t.columns.find((c) => c.name.toLowerCase().includes(ql));
+    const a = annOf(name);
+    const hay = [descOf(name, t), a.owner, (a.tags || []).join(' ')].join(' ').toLowerCase();
+    if (hay.includes(ql)) return { ok: true, doc: true };
+    const col = t.columns.find((c) => c.name.toLowerCase().includes(ql) || (c.comment || '').toLowerCase().includes(ql) || colNote(name, c.name).toLowerCase().includes(ql));
     return col ? { ok: true, col: col.name } : { ok: false };
   }
 
@@ -30,7 +47,8 @@
       if (ui.filter === 'related' && !deg) continue;
       if (ui.filter === 'orphans' && deg) continue;
       if (ui.filter === 'nopk' && t.columns.some((c) => c.pk)) continue;
-      rows.push({ name, t, deg, hit: m.col });
+      if (ui.filter === 'undoc' && descOf(name, t)) continue;
+      rows.push({ name, t, deg, hit: m.col, doc: m.doc });
     }
     const by = {
       name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
@@ -80,7 +98,9 @@
             h('div', { class: 't' }, icon('table', 15), h('span', { class: 'truncate' }, Etch.highlight(r.name, ui.q))),
             h('div', { class: 'm' }, h('span', null, r.t.columns.length + ' col.'),
               r.deg ? h('span', { style: { color: 'var(--accent)' } }, icon('link', 12), ' ' + r.deg) : null,
-              r.hit ? h('span', { class: 'truncate', style: { color: 'var(--accent)' } }, 'col: ', Etch.highlight(r.hit, ui.q)) : null)));
+              r.hit ? h('span', { class: 'truncate', style: { color: 'var(--accent)' } }, 'col: ', Etch.highlight(r.hit, ui.q)) : null,
+              r.doc ? h('span', { class: 'truncate', style: { color: 'var(--accent)' } }, 'en la documentación') : null),
+            descOf(r.name, r.t) ? h('div', { class: 'm' }, h('span', { class: 'truncate faint', title: descOf(r.name, r.t) }, descOf(r.name, r.t))) : null));
         });
         if (rows.length > ui.limit) {
           frag.append(h('button', { class: 'btn sm block', style: { margin: '8px 0' }, onclick: () => { ui.limit += MAX_ROWS; paintList(); } },
@@ -144,6 +164,50 @@
       ? h('button', { class: 'linkbtn', onclick: () => select(name), title: 'Abrir ' + name }, name)
       : h('span', { class: 'mono muted', title: 'Fuera del esquema escaneado' }, name);
 
+    function descCell(c) {
+      const td = h('td', { class: 'desc' });
+      const view = () => {
+        const note = colNote(key, c.name), text = note || c.comment || '';
+        clear(td).append(h('div', { class: 'row', style: { gap: '6px', alignItems: 'flex-start' } },
+          h('span', { class: 'grow' + (text ? '' : ' faint'), style: { fontSize: '12.5px' } }, text || '—',
+            c.comment && !note ? h('span', { class: 'badge', style: { marginLeft: '6px' }, title: 'Descripción que ya tenía la base de datos' }, 'base') : null),
+          h('button', { class: 'btn icon-only ghost', style: { width: '24px', height: '24px' }, title: 'Editar descripción', 'aria-label': 'Editar descripción de ' + c.name, onclick: edit }, icon('edit', 13))));
+      };
+      const edit = () => {
+        const input = h('input', { class: 'input', maxlength: 4000, value: colNote(key, c.name) || c.comment || '', style: { height: '30px' }, 'aria-label': 'Descripción de ' + c.name });
+        let done = false;
+        const commit = async () => { if (done) return; done = true; const v = input.value.trim(); if (v !== (colNote(key, c.name) || c.comment || '')) await saveAnn(key, c.name, { note: v === c.comment ? '' : v }); view(); };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { done = true; view(); } });
+        input.addEventListener('blur', commit);
+        clear(td).append(input); input.focus(); input.select();
+      };
+      view();
+      return td;
+    }
+
+    function docCard() {
+      const a = annOf(key);
+      const note = h('textarea', { class: 'textarea', rows: 3, maxlength: 4000, 'aria-label': 'Descripción de la tabla',
+        placeholder: '¿Qué guarda esta tabla? ¿Para qué se usa? Cualquier cosa que ayude a quien la lea después.' });
+      note.value = a.note || '';
+      const owner = h('input', { class: 'input', maxlength: 80, placeholder: 'Responsable o equipo', 'aria-label': 'Responsable', value: a.owner || '' });
+      const tags = h('input', { class: 'input', placeholder: 'Etiquetas separadas por coma (ej: core, facturación)', 'aria-label': 'Etiquetas', value: (a.tags || []).join(', ') });
+      const status = h('span', { class: 'faint', style: { fontSize: '12px' } });
+      const snapshot = () => JSON.stringify([note.value.trim(), owner.value.trim(), tags.value]);
+      let last = snapshot();
+      const save = async () => {
+        if (snapshot() === last) return;
+        const ok = await saveAnn(key, null, { note: note.value, owner: owner.value, tags: tags.value.split(',').map((x) => x.trim()).filter(Boolean) });
+        if (ok) { last = snapshot(); status.textContent = 'Guardado'; setTimeout(() => { status.textContent = ''; }, 1800); }
+      };
+      [note, owner, tags].forEach((el) => el.addEventListener('blur', save));
+      return h('div', { class: 'card doc-card' },
+        h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '8px' } }, h('h3', { style: { margin: 0 } }, 'Documentación'), status),
+        t.comment ? h('div', { class: 'native' }, h('span', { class: 'badge' }, 'en la base de datos'), h('span', null, t.comment)) : null,
+        note, h('div', { class: 'row2 even', style: { marginTop: '10px' } }, owner, tags),
+        h('div', { class: 'hint', style: { marginTop: '6px' } }, 'Se guarda al salir del campo, solo en tu equipo. Sobrevive a los reescaneos y se incluye al exportar el diccionario.'));
+    }
+
     const colRows = t.columns.map((c, i) => {
       const fk = fkByCol.get(c.name);
       return h('tr', { class: c.pk ? 'pk' : fk ? 'fk' : '' },
@@ -153,6 +217,7 @@
           fk ? h('span', { class: 'badge fk', title: 'Clave foránea' }, 'FK') : null),
         h('td', { class: 'ty' }, c.type || '—'),
         h('td', { class: 'nl' + (c.null ? '' : ' no') }, c.null ? 'NULL' : 'NOT NULL'),
+        descCell(c),
         h('td', null, fk ? h('span', { class: 'row', style: { gap: '6px' } }, h('span', { class: 'arrow faint' }, icon('arrow', 13)), tableLink(fk.ref_table), fk.ref_col ? h('span', { class: 'faint mono', style: { fontSize: '12px' } }, '.' + fk.ref_col) : null) : ''));
     });
 
@@ -185,14 +250,17 @@
             h('span', null, Etch.plural(t.relations.length + t.referenced_by.length, 'relación', 'relaciones')))),
         h('div', { class: 'row', style: { flexWrap: 'wrap' } },
           h('button', { class: 'btn', onclick: () => Etch.go('map', { focus: key }) }, icon('map', 16), 'Ver en el mapa'),
+          h('button', { class: 'btn', onclick: () => Etch.go('paths', { from: key }) }, icon('route', 16), 'Camino hasta…'),
           h('button', { class: 'btn', onclick: () => copy(key, 'Nombre') }, icon('copy', 16), 'Copiar nombre'),
           h('button', { class: 'btn', onclick: () => copy(Etch.buildDDL(engine, key, t), 'DDL') }, icon('file', 16), 'Copiar DDL'))),
 
       !pkCount ? h('div', { class: 'banner' }, icon('alert', 18), h('div', { class: 'grow' }, h('b', null, 'Sin clave primaria. '), 'Esta tabla no tiene PK declarada: puede admitir filas duplicadas y dificulta las relaciones.')) : null,
 
+      docCard(),
+
       h('div', { class: 'sec-title' }, 'Columnas'),
       h('table', { class: 'cols' },
-        h('thead', null, h('tr', null, ['#', 'Nombre', 'Tipo', 'Nulos', 'Referencia'].map((x) => h('th', null, x)))),
+        h('thead', null, h('tr', null, ['#', 'Nombre', 'Tipo', 'Nulos', 'Descripción', 'Referencia'].map((x) => h('th', null, x)))),
         h('tbody', null, colRows)),
 
       h('div', { class: 'relgrid' },

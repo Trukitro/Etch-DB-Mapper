@@ -1,10 +1,10 @@
 ; Inno Setup script for Etch-DB-Mapper
 ; Build with: tools\build_windows.ps1 -Installer
-;   (o a mano: ISCC.exe /DMyAppVersion=2.2.0 installer\setup.iss)
+;   (o a mano: ISCC.exe /DMyAppVersion=2.3.0 installer\setup.iss)
 
 #define MyAppName "Etch-DB-Mapper"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.2.0"
+  #define MyAppVersion "2.3.0"
 #endif
 #define MyAppPublisher "Etch"
 #define MyAppURL "https://github.com/Trukitro/Etch-DB-Mapper"

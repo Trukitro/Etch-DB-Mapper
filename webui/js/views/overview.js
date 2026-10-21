@@ -67,6 +67,7 @@
             h('code', null, 'ClientID'), '). Abajo se muestran las relaciones probables que se pueden deducir por nombre.')) : null,
 
         inferredBanner(sc),
+        docsCard(sc),
 
         h('div', { class: 'grid two' },
           h('div', { class: 'card' }, h('h3', null, 'Tablas más conectadas'),
@@ -99,6 +100,35 @@
             h('button', { class: 'btn', onclick: () => exportJson(sc, S.alias) }, icon('download', 16), 'Exportar esquema (JSON)')))));
     },
   };
+
+  function docStats(sc) {
+    const ann = ((sc.annotations || {}).tables) || {};
+    let tdoc = 0, cols = 0, cdoc = 0;
+    for (const [name, t] of Object.entries(sc.tables)) {
+      const a = ann[name] || {};
+      if (a.note || t.comment) tdoc++;
+      for (const c of t.columns) { cols++; if ((a.columns || {})[c.name] || c.comment) cdoc++; }
+    }
+    return { tables: Object.keys(sc.tables).length, tdoc, cols, cdoc };
+  }
+
+  function docsCard(sc) {
+    const d = docStats(sc), pct = d.tables ? Math.round(d.tdoc / d.tables * 100) : 0;
+    const native = Object.values(sc.tables).filter((t) => t.comment).length;
+    return h('div', { class: 'card', style: { marginBottom: '14px' } },
+      h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '14px' } },
+        h('div', { class: 'grow', style: { minWidth: '260px' } }, h('h3', { style: { margin: '0 0 6px' } }, 'Documentación'),
+          h('div', null, h('b', null, d.tdoc + ' de ' + d.tables), ' tablas y ', h('b', null, d.cdoc + ' de ' + d.cols), ' columnas tienen descripción (' + pct + ' % de las tablas).'),
+          h('div', { class: 'meter', style: { maxWidth: '360px' } }, h('span', { style: { width: Math.max(pct, 2) + '%' } })),
+          h('div', { class: 'faint', style: { fontSize: '12.5px' } }, native
+            ? native + (native === 1 ? ' tabla' : ' tablas') + ' con descripción que ya tenía la base de datos. Agrega las tuyas en el Explorador.'
+            : 'Agrega notas, etiquetas y responsables a tus tablas desde el Explorador: se guardan solo en tu equipo.')),
+        h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '8px' } },
+          h('button', { class: 'btn', onclick: () => Etch.go('explorer', { filter: 'undoc' }) }, icon('edit', 15), 'Documentar'),
+          h('button', { class: 'btn', onclick: () => Etch.exportDocs('markdown') }, icon('file', 15), 'Markdown'),
+          h('button', { class: 'btn', onclick: () => Etch.exportDocs('csv') }, icon('table', 15), 'Excel (CSV)'),
+          h('button', { class: 'btn primary', onclick: () => Etch.exportDocs('html') }, icon('download', 15), 'Informe HTML'))));
+  }
 
   function inferredBanner(sc) {
     const inf = sc.inferred || [];

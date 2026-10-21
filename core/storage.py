@@ -42,6 +42,7 @@ DEFAULT_SETTINGS = {
 }
 
 MAX_SNAPSHOTS = 8
+MAX_NOTE, MAX_OWNER, MAX_TAGS, MAX_TAG = 4000, 80, 20, 40
 
 
 def compact_schema(tables: dict) -> dict:
@@ -67,6 +68,7 @@ class Store:
         self._conn_path = self.dir / "db_maps.json"
         self._set_path = self.dir / "settings.json"
         self._snap_dir = self.dir / "snapshots"
+        self._ann_dir = self.dir / "annotations"
         self._lock = threading.RLock()
         self.load_warnings: list[str] = []
         self.protector = protector if protector is not None else get_protector()
@@ -209,10 +211,11 @@ class Store:
             entry = self._conns.pop(alias, None)
             self._write(self._conn_path, self._conns)
             if entry and entry.get("id"):
-                try:
-                    (self._snap_dir / f"{entry['id']}.json").unlink()
-                except OSError:
-                    pass
+                for folder in (self._snap_dir, self._ann_dir):
+                    try:
+                        (folder / f"{entry['id']}.json").unlink()
+                    except OSError:
+                        pass
 
     # ---------- historial de versiones del esquema ----------
     def _snap_path(self, conn_id: str) -> Path:
@@ -268,6 +271,64 @@ class Store:
         with self._lock:
             versions = self._load_versions(conn_id)
             return versions[index] if 0 <= index < len(versions) else None
+
+    # ---------- documentación del usuario (notas, etiquetas, responsable) ----------
+    # Vive aparte de db_maps.json y se identifica por nombre de tabla/columna: sobrevive a los
+    # reescaneos y a los cambios de esquema.
+    def get_annotations(self, conn_id: str) -> dict:
+        path = self._ann_dir / f"{conn_id}.json"
+        if not path.exists():
+            return {"tables": {}}
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) and isinstance(data.get("tables"), dict) else {"tables": {}}
+        except (json.JSONDecodeError, OSError):
+            return {"tables": {}}
+
+    @staticmethod
+    def _clean_tags(tags) -> list:
+        out = []
+        for t in tags if isinstance(tags, list) else []:
+            t = " ".join(str(t).split())[:MAX_TAG]
+            if t and t.lower() not in (x.lower() for x in out):
+                out.append(t)
+        return out[:MAX_TAGS]
+
+    def set_annotation(self, conn_id: str, table: str, column, fields: dict) -> dict:
+        """Guarda la documentación de una tabla (column=None: note, tags, owner) o de una
+        columna (solo note). Los campos vacíos se borran; devuelve la entrada resultante."""
+        if not isinstance(table, str) or not table:
+            raise ValueError("Falta la tabla.")
+        fields = fields or {}
+        with self._lock:
+            data = self.get_annotations(conn_id)
+            tables = data["tables"]
+            entry = tables.setdefault(table, {})
+            if column is None:
+                if "note" in fields:
+                    entry["note"] = str(fields["note"] or "").strip()[:MAX_NOTE]
+                if "owner" in fields:
+                    entry["owner"] = str(fields["owner"] or "").strip()[:MAX_OWNER]
+                if "tags" in fields:
+                    entry["tags"] = self._clean_tags(fields["tags"])
+            else:
+                note = str(fields.get("note") or "").strip()[:MAX_NOTE]
+                cols = entry.setdefault("columns", {})
+                if note:
+                    cols[str(column)] = note
+                else:
+                    cols.pop(str(column), None)
+            for key in ("note", "owner", "tags"):
+                if not entry.get(key):
+                    entry.pop(key, None)
+            if not entry.get("columns"):
+                entry.pop("columns", None)
+            if not entry:
+                tables.pop(table, None)
+            self._ann_dir.mkdir(parents=True, exist_ok=True)
+            self._write(self._ann_dir / f"{conn_id}.json", data)
+            return tables.get(table, {})
 
     # ---------- ajustes ----------
     def settings(self) -> dict:

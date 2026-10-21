@@ -10,7 +10,7 @@
   const LAYOUTS = [['fcose', 'Fuerzas (recomendado)'], ['breadthfirst', 'Jerárquico'], ['concentric', 'Concéntrico'], ['circle', 'Círculo'], ['grid', 'Grilla']];
   let fcoseReady = false;
 
-  const ui = { alias: null, scope: null, depth: 2, layout: null, focus: null, selected: null };
+  const ui = { alias: null, scope: null, depth: 2, layout: null, focus: null, selected: null, pathNames: null };
   let cy = null, ro = null, onResize = null;
   const view = { tables: {} };   // esquema efectivo del mapa (con o sin relaciones inferidas)
 
@@ -101,6 +101,8 @@
         'font-family': cssVar('--mono') || 'monospace', 'text-background-color': mapbg, 'text-background-opacity': 1, 'text-background-padding': 3,
         'text-rotation': 'autorotate', 'z-index': 20 } },
       { selector: 'node.hl', style: { opacity: 1 } },
+      { selector: 'node.path', style: { opacity: 1, 'border-width': 4, 'border-color': accent, 'font-weight': 'bold' } },
+      { selector: 'edge.path', style: { opacity: 1, width: 3.4, 'line-color': accent, 'target-arrow-color': accent, 'z-index': 15 } },
     ];
   }
 
@@ -179,8 +181,23 @@
     nb.removeClass('faded');
     nb.edges().addClass('hl');
   }
+  /* Camino resaltado (viene de la vista Rutas): atenúa todo lo que no es parte del recorrido. */
+  function applyPath() {
+    const names = ui.pathNames;
+    if (!cy || !names || !names.length) return;
+    const set = new Set(names);
+    cy.elements().addClass('faded');
+    names.forEach((n) => cy.getElementById(n).removeClass('faded').addClass('path'));
+    cy.edges().forEach((e) => {
+      const i = names.indexOf(e.source().id()), j = names.indexOf(e.target().id());
+      if (i >= 0 && j >= 0 && Math.abs(i - j) === 1) e.removeClass('faded').addClass('path hl');
+    });
+    const onPath = cy.nodes('.path');
+    if (onPath.nonempty()) cy.fit(onPath, 90);
+  }
   function clearFocus() {
     cy.elements().removeClass('faded hl');
+    if (ui.pathNames) { applyPath(); return; }
     const sel = ui.selected && cy.getElementById(ui.selected);
     if (sel && sel.nonempty()) applyFocus(sel);
   }
@@ -205,6 +222,7 @@
 
       if (ui.alias !== S.alias) Object.assign(ui, { alias: S.alias, scope: null, focus: null, selected: null, depth: 2 });
       ui.layout = ui.layout || S.settings.map_layout || 'fcose';
+      ui.pathNames = args.path && args.path.length ? args.path.filter((n) => tables[n]) : null;
       if (args.focus && tables[args.focus]) { ui.scope = 'focus'; ui.focus = args.focus; ui.selected = args.focus; }
       if (!ui.scope) ui.scope = S.settings.map_include_orphans ? 'all' : 'related';
       if (ui.scope === 'focus' && (!ui.focus || !tables[ui.focus])) ui.focus = hubs[0] || names[0];
@@ -239,9 +257,11 @@
         title: inferredAll.length ? 'Muestra relaciones que la base no declara pero que los nombres sugieren (línea punteada). Son sugerencias, no claves foráneas reales.' : 'No se encontraron relaciones probables por nombre en este esquema.',
         onclick: async () => { await Etch.saveSetting('map_show_inferred', !showInferred); Etch.render(); } },
         icon('zap', 13), 'Probables (' + inferredAll.length + ')');
+      const pathChip = ui.pathNames ? h('button', { class: 'chip', 'aria-pressed': 'true', title: 'Quitar el resaltado del camino',
+        onclick: () => { ui.pathNames = null; draw(); } }, icon('route', 13), 'Camino resaltado ✕') : null;
       const btn = (ico, title, fn, label) => h('button', { class: 'btn sm' + (label ? '' : ' icon-only'), title, 'aria-label': title, onclick: fn }, icon(ico, 15), label || null);
       const tools = h('div', { class: 'map-tools' },
-        scopeSel, focusGroup, h('span', { class: 'sep' }), layoutSel, infBtn, h('span', { class: 'sep' }),
+        scopeSel, focusGroup, h('span', { class: 'sep' }), layoutSel, infBtn, pathChip, h('span', { class: 'sep' }),
         h('div', { class: 'searchbox' }, icon('search', 15), search), stats, h('div', { class: 'grow' }),
         btn('fit', 'Ajustar a la pantalla', () => cy && cy.animate({ fit: { padding: 50 } }, { duration: 250 })),
         btn('minus', 'Alejar', () => zoomBy(1 / 1.3)), btn('plus', 'Acercar', () => zoomBy(1.3)),
@@ -297,6 +317,7 @@
         cy.on('dbltap', 'node', (e) => { ui.scope = 'focus'; ui.focus = e.target.id(); draw(); openPanel(ui.focus); });
         cy.on('tap', (e) => { if (e.target === cy) closePanel(); });
         if (ui.selected && cy.getElementById(ui.selected).nonempty()) openPanel(ui.selected, true);
+        if (ui.pathNames) applyPath();
       }
 
       /* ---- panel lateral ---- */

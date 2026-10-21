@@ -130,6 +130,7 @@
     }));
     return out;
   }
+  const annotations = {};   // alias -> { tables: {...} }
   const delay = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms));
   const checkAlias = (a) => (!a ? 'Poné un nombre para la conexión.' : a.length > 60 ? 'El nombre es demasiado largo (máximo 60 caracteres).' : null);
 
@@ -253,7 +254,7 @@
       const tables = finalize(e.data);
       const inferred = inferMock(tables);
       return { ok: true, alias, engine: engineOf(e.uri), status: e.status, last_scan: e.last_scan, duration_sec: e.duration_sec, last_error: e.last_error, tables,
-        meta: Object.assign(metaOf(tables), { inferred_count: inferred.length }), inferred, versions: 2, map: e.map || {} };
+        meta: Object.assign(metaOf(tables), { inferred_count: inferred.length }), inferred, versions: 2, annotations: annotations[alias] || { tables: {} }, map: e.map || {} };
     },
     async save_map_state(alias, state) { if (store[alias]) store[alias].map = state; return { ok: !!store[alias] }; },
     async list_versions() {
@@ -275,6 +276,39 @@
         : (force ? { ok: true, current: '2.2.0', latest: '2.2.0', newer: false, url: '' } : { ok: false, skipped: true, error: 'Ya se consultó hoy.' });
     },
     async open_data_folder() { return { ok: true, path: '(modo desarrollo)' }; },
+    async save_annotation(alias, table, column, fields) {
+      const all = (annotations[alias] = annotations[alias] || { tables: {} }).tables, t = (all[table] = all[table] || {});
+      if (column === null || column === undefined) {
+        if ('note' in fields) t.note = (fields.note || '').trim();
+        if ('owner' in fields) t.owner = (fields.owner || '').trim();
+        if ('tags' in fields) t.tags = fields.tags;
+      } else { t.columns = t.columns || {}; if ((fields.note || '').trim()) t.columns[column] = fields.note.trim(); else delete t.columns[column]; }
+      ['note', 'owner'].forEach((k) => { if (!t[k]) delete t[k]; }); if (!t.tags || !t.tags.length) delete t.tags; if (t.columns && !Object.keys(t.columns).length) delete t.columns;
+      if (!Object.keys(t).length) delete all[table];
+      return { ok: true, annotation: all[table] || {} };
+    },
+    async find_paths(alias, source, target, includeInferred) {
+      await delay(250);
+      const tables = finalize(store[alias].data);
+      if (!tables[source] || !tables[target]) return { ok: false, error: 'Elige dos tablas del esquema.' };
+      if (source === target) return { ok: false, error: 'Elige dos tablas distintas.' };
+      const inferred = includeInferred ? inferMock(tables) : [];
+      const adj = {}; Object.keys(tables).forEach((n) => { adj[n] = []; });
+      const add = (a, ac, b, bc, inf) => { if (adj[a] && adj[b] && a !== b) { adj[a].push({ left: a, left_col: ac, right: b, right_col: bc, inferred: inf }); adj[b].push({ left: b, left_col: bc, right: a, right_col: ac, inferred: inf }); } };
+      Object.entries(tables).forEach(([n, t]) => t.relations.forEach((r) => add(n, r.col, r.ref_table, r.ref_col, false)));
+      inferred.forEach((r) => add(r.table, r.col, r.ref_table, r.ref_col, true));
+      const found = []; const cap = 6;
+      (function dfs(node, seen, path) { if (found.length > 60) return; if (node === target) { found.push(path.slice()); return; } if (path.length >= cap) return;
+        adj[node].forEach((e) => { if (!seen.has(e.right)) { seen.add(e.right); path.push(e); dfs(e.right, seen, path); path.pop(); seen.delete(e.right); } }); })(source, new Set([source]), []);
+      found.sort((a, b) => a.filter((x) => x.inferred).length - b.filter((x) => x.inferred).length || a.length - b.length);
+      const sqlOf = (p) => '-- Camino: ' + [p[0].left].concat(p.map((x) => x.right)).join(' → ') + '\nSELECT *\nFROM ' + p[0].left + ' AS t1\n' + p.map((x, i) => 'INNER JOIN ' + x.right + ' AS t' + (i + 2) + ' ON t' + (i + 1) + '.' + x.left_col + ' = t' + (i + 2) + '.' + x.right_col).join('\n') + ';';
+      return { ok: true, paths: found.slice(0, 5).map((p) => ({ steps: p, length: p.length, inferred: p.filter((x) => x.inferred).length, sql: sqlOf(p) })) };
+    },
+    async export_docs(alias, kind) {
+      const ext = { markdown: 'md', csv: 'csv', html: 'html' }[kind];
+      if (!ext) return { ok: false, error: 'Formato desconocido.' };
+      return { ok: true, filename: 'diccionario_' + alias + '.' + ext, content: '# Diccionario de datos — ' + alias + '\n\n(modo desarrollo: contenido simulado)\n' };
+    },
     async pick_file() { return { ok: false }; },
     async save_file(name, content, encoding) {
       const blob = encoding === 'base64' ? new Blob([Uint8Array.from(atob(content), (ch) => ch.charCodeAt(0))]) : new Blob([content], { type: 'text/plain' });

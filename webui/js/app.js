@@ -4,12 +4,13 @@
   const Etch = window.Etch;
   const { h, icon, $, clear } = Etch;
 
-  const CONN_VIEWS = ['overview', 'explorer', 'map', 'changes'];
+  const CONN_VIEWS = ['overview', 'explorer', 'map', 'paths', 'changes'];
   const FILL_VIEWS = ['explorer', 'map'];
   const TAB_DEFS = [
     ['overview', 'Resumen', 'grid'],
     ['explorer', 'Explorador', 'table'],
     ['map', 'Mapa', 'map'],
+    ['paths', 'Rutas', 'route'],
     ['changes', 'Cambios', 'history'],
   ];
   const PHASES = [['connect', 'Conectar'], ['tables', 'Tablas'], ['columns', 'Columnas'], ['keys', 'Claves'], ['relations', 'Relaciones'], ['build', 'Armar']];
@@ -53,6 +54,24 @@
   Etch.saveSetting = function (key, value) {
     S.settings[key] = value;
     return Etch.api.save_settings({ [key]: value });
+  };
+
+  /* ---------------- exportar el diccionario de datos ---------------- */
+  Etch.exportDocs = async function (kind) {
+    const c = conn();
+    if (!c || !c.has_data) return;
+    if (kind === 'html') {
+      const ok = await Etch.dialogs.confirm({
+        title: 'Generar informe HTML', confirmLabel: 'Generar',
+        message: 'El informe es un solo archivo que se abre en cualquier navegador, sin instalar nada. Incluye los nombres de tablas y columnas, tipos, relaciones y TUS notas. No incluye datos de las tablas, URI ni contraseñas. Revísalo antes de compartirlo.',
+      });
+      if (!ok) return;
+    }
+    const r = await Etch.api.export_docs(c.alias, kind);
+    if (!r.ok) { Etch.toast('error', 'No se pudo exportar', { detail: r.error }); return; }
+    const saved = await Etch.api.save_file(r.filename, r.content);
+    if (saved.ok) Etch.toast('success', 'Exportado: ' + r.filename, { detail: saved.path });
+    else if (!saved.cancelled) Etch.toast('error', 'No se pudo guardar el archivo', { detail: saved.error });
   };
 
   /* ---------------- versión nueva ---------------- */
@@ -308,7 +327,7 @@
       if (S.alias) Etch.scan(S.alias);
       return;
     }
-    if (e.altKey && ['1', '2', '3', '4'].includes(e.key)) {
+    if (e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
       const c = conn();
       if (c && c.has_data) { e.preventDefault(); Etch.go(TAB_DEFS[Number(e.key) - 1][0]); }
       return;
