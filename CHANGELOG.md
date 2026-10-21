@@ -2,6 +2,11 @@
 
 Historial de cambios de Etch-DB-Mapper. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen [SemVer](https://semver.org/lang/es/).
 
+## [2.1.1] - 2026-10-21
+
+### Corregido
+- La ventana podía mostrar la interfaz de **otra aplicación** (por ejemplo otra app pywebview abierta al mismo tiempo) en lugar de Etch-DB-Mapper. Ambas compartían el puerto fijo 42001 del servidor interno; ahora Etch-DB-Mapper usa un puerto libre propio y no comparte caché del navegador.
+
 ## [2.1.0] - 2026-10-20
 
 ### Nuevo

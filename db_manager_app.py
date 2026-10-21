@@ -26,6 +26,14 @@ def _setup_logging(data_dir, debug):
     root.addHandler(handler)
 
 
+def _free_port():
+    """Puerto TCP libre elegido por el sistema (evita choques con otras apps)."""
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def _fatal(message):
     """La app empaquetada no tiene consola: el error se muestra en un diálogo."""
     print(message, file=sys.stderr)
@@ -66,8 +74,13 @@ def main(argv=None):
     # En Windows se exige WebView2 (Chromium). Sin esto pywebview caería en
     # el motor legacy de IE, donde la UI se vería rota.
     gui = "edgechromium" if sys.platform == "win32" else None
+    # pywebview sirve los archivos locales por un servidor HTTP interno. Con
+    # private_mode=False lo ata al puerto FIJO 42001, que otras apps pywebview
+    # comparten: la ventana terminaba mostrando la página de otra aplicación.
+    # Modo privado = puerto libre al azar y sin caché compartida (la app guarda
+    # todo en su carpeta de datos, no usa cookies ni localStorage).
     try:
-        webview.start(debug=args.debug, gui=gui, private_mode=False, storage_path=str(store.dir / "webview"))
+        webview.start(debug=args.debug, gui=gui, private_mode=True, http_port=_free_port())
     except Exception as e:
         log.exception("No se pudo iniciar la ventana")
         _fatal(
