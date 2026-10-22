@@ -319,6 +319,9 @@
         warnings: [{ level: 'warn', table: names[0], column: 'x', message: 'Aviso de ejemplo (simulado).' }, { level: 'info', table: null, column: null, message: 'No se migran índices no únicos ni datos.' }],
         tables: names.slice(0, 3).map((n) => ({ name: n, target_name: n, columns: tables[n].columns.map((c) => ({ name: c.name, target_name: c.name, source_type: c.type, target_type: c.type.toUpperCase(), identity: false, nullable: c.null, pk: c.pk })) })) };
     },
+    async preflight_copy() { return { ok: false, error: '(modo desarrollo) Copiar datos solo funciona en la app real.' }; },
+    async start_copy() { return { ok: false, error: '(modo desarrollo) Copiar datos solo funciona en la app real.' }; },
+    async cancel_copy() { return { ok: false, error: 'No hay una copia en curso.' }; },
     async pick_file() { return { ok: false }; },
     async save_file(name, content, encoding) {
       const blob = encoding === 'base64' ? new Blob([Uint8Array.from(atob(content), (ch) => ch.charCodeAt(0))]) : new Blob([content], { type: 'text/plain' });

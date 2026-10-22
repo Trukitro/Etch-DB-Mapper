@@ -164,6 +164,21 @@ def script(window, api):
         shot("14-migracion")
         js(window, "document.querySelectorAll('details.diff-table')[0].open = true; document.querySelector('pre.sql').scrollIntoView({block:'start'}); window.scrollBy(0,-10); document.getElementById('view').scrollTop = document.querySelector('pre.sql').offsetTop - 90", 1.0)
         shot("15-migracion-script")
+
+        # --- migración fase 2: copiar datos a una base vacía (SQLite de destino) ---
+        dest_alias = "Destino vacío (SQLite)"
+        dest = DATA / "demo" / "destino_copia.sqlite"
+        api.save_connection(dest_alias, "sqlite://" + str(dest).replace("\\", "/"))
+        js(window, "Etch.refreshConnections().then(()=>{Etch.selectConnection(%s); Etch.go('migrate');})" % json.dumps(demo_alias), 1.5)
+        js(window, "[...document.querySelectorAll('.page .tab')].find(b=>b.textContent.includes('Copiar datos')).click()", 0.8)
+        js(window, "const s=document.querySelector('.page select'); s.value=%s; s.dispatchEvent(new Event('change')); setTimeout(()=>[...document.querySelectorAll('.btn.primary')].find(b=>b.textContent.includes('Revisar')).click(), 300)" % json.dumps(dest_alias), 3.0)
+        js(window, "document.getElementById('view').scrollTop = 0", 0.4)
+        shot("16-copia-plan")
+        plan = api.preflight_copy(demo_alias, dest_alias)
+        api.start_copy(plan["token"], dest_alias)
+        time.sleep(4)
+        js(window, "const v=document.getElementById('view'); v.scrollTop = v.scrollHeight", 0.8)
+        shot("17-copia-resultado")
         js(window, "Etch.go('map')", 2.5)
         shot("04-mapa")
 

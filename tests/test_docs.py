@@ -81,9 +81,11 @@ class JoinTests(unittest.TestCase):
         paths = joins.find_paths(t, infer_relations(t), "Items", "Customers")
         self.assertEqual([s["right"] for s in paths[0]], ["Orders", "Customers"])
         sql = joins.join_sql("postgres", t, paths[0])
-        self.assertIn("FROM Items AS t1", sql)
-        self.assertIn("INNER JOIN Orders AS t2 ON t1.OrderID = t2.OrderID", sql)
-        self.assertIn("INNER JOIN Customers AS t3 ON t2.CustomerID = t3.CustomerID", sql)
+        self.assertIn('FROM "Items" AS t1', sql)                       # PostgreSQL: los nombres con mayúsculas llevan comillas
+        self.assertIn('INNER JOIN "Orders" AS t2 ON t1."OrderID" = t2."OrderID"', sql)
+        self.assertIn('INNER JOIN "Customers" AS t3 ON t2."CustomerID" = t3."CustomerID"', sql)
+        low = joins.join_sql("mssql", t, paths[0])
+        self.assertIn("FROM Items AS t1", low)
         self.assertTrue(sql.rstrip().endswith(";"))
 
     def test_inferred_relations_are_used_only_if_requested_and_flagged(self):
@@ -106,6 +108,10 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(joins.quote_ident("postgres", "Order Detail"), '"Order Detail"')
         self.assertEqual(joins.quote_ident("mssql", "a]b c"), "[a]]b c]")
         self.assertEqual(joins.quote_ident("postgres", "plain_name"), "plain_name")
+        self.assertEqual(joins.quote_ident("postgres", "Prueba"), '"Prueba"')        # PostgreSQL pliega a minúsculas
+        self.assertEqual(joins.quote_ident("mssql", "Prueba"), "Prueba")
+        self.assertEqual(joins.quote_ident("postgres", "order"), '"order"')          # palabra reservada
+        self.assertEqual(joins.quote_ident("mssql", "user"), "[user]")
 
     def test_schema_is_qualified(self):
         t = finalize_schema({"A": {"schema": "dbo", "name": "A", "columns": [col("id", pk=True)], "relations": []},

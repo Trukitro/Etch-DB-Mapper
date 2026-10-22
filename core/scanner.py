@@ -77,9 +77,10 @@ def summarize_error(exc) -> str:
     completo como mensaje. Nos quedamos con la última línea no vacía, que
     es la excepción real."""
     msg = scrub_secrets(str(exc).strip())
-    for line in reversed(msg.splitlines()):
-        if line.strip():
-            return line.strip()
+    # psycopg2 agrega líneas de contexto ("LINE 1: ..." y un "^"): no son el error
+    lines = [l for l in msg.splitlines() if l.strip() and not re.match(r"^\s*\^+\s*$", l) and not re.match(r"^LINE \d+:", l.strip())]
+    if lines:
+        return lines[-1].strip()
     return msg or exc.__class__.__name__
 
 

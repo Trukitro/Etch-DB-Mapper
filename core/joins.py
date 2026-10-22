@@ -9,12 +9,20 @@ solo usan claves reales.
 """
 import re
 
+from .migrate import RESERVED
+
 _PLAIN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MAX_EXPANSIONS = 40000
 
 
+_PLAIN_LOWER = re.compile(r"^[a-z_][a-z0-9_]*$")
+
+
 def quote_ident(engine: str, name: str) -> str:
-    if _PLAIN.match(name):
+    """Cita un identificador solo si hace falta. PostgreSQL pliega a minúsculas lo que no lleva comillas,
+    así que un nombre con mayúsculas (Prueba) SIEMPRE necesita comillas; las palabras reservadas, también."""
+    plain = _PLAIN_LOWER.match(name) if engine == "postgres" else _PLAIN.match(name)
+    if plain and name.lower() not in RESERVED:
         return name
     if engine == "mssql":
         return "[" + name.replace("]", "]]") + "]"

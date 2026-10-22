@@ -410,6 +410,7 @@ def generate_ddl(tables: dict, source_engine: str, target: str, options: dict = 
 
     # ---- columnas ----
     tables_out, create_blocks, fk_blocks, desc_blocks = [], {}, [], []
+    fk_stmts, desc_stmts = [], []     # versión ejecutable (sin ';') de las sentencias de esos bloques
     stats = {"tables": 0, "columns": 0, "foreign_keys": 0, "uniques": 0, "identities": 0, "defaults": 0}
     col_target = {}
     for n in selected:
@@ -482,7 +483,8 @@ def generate_ddl(tables: dict, source_engine: str, target: str, options: dict = 
                 if text:
                     parts.append("COMMENT " + _lit(text[:1000], target))
             cols_sql.append("  " + " ".join(parts))
-            cols_out.append({"name": c["name"], "target_name": cname, "source_type": c.get("type") or "?", "target_type": tsql,
+            cols_out.append({"name": c["name"], "target_name": cname, "qname": namer.q(cname), "source_type": c.get("type") or "?", "target_type": tsql,
+                             "source_kind": ti["kind"], "source_prec": c.get("prec"),
                              "identity": identity, "nullable": bool(c["null"]), "pk": bool(c["pk"])})
             stats["columns"] += 1
 
@@ -515,6 +517,7 @@ def generate_ddl(tables: dict, source_engine: str, target: str, options: dict = 
                     inline_fks.append(f"  CONSTRAINT {namer.q(fk_name)} {clause}")
                 else:
                     fk_blocks.append(f"ALTER TABLE {qname(n)} ADD CONSTRAINT {namer.q(fk_name)} {clause};")
+                    fk_stmts.append({"kind": "fk", "table": n, "sql": fk_blocks[-1][:-1]})
         body = ",\n".join(cols_sql + constraints + inline_fks)
         suffix = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4" if target == "mysql" else ""
         if target == "mysql" and opts["include_comments"]:
@@ -523,17 +526,20 @@ def generate_ddl(tables: dict, source_engine: str, target: str, options: dict = 
                 suffix += " COMMENT=" + _lit(ttext[:2000], target)
         create_blocks[n] = f"CREATE TABLE {qname(n)} (\n{body}\n){suffix};"
         stats["tables"] += 1
-        tables_out.append({"name": n, "target_name": (tinfo[n]["schema"] + "." if tinfo[n]["schema"] else "") + tinfo[n]["name"], "columns": cols_out})
+        tables_out.append({"name": n, "target_name": (tinfo[n]["schema"] + "." if tinfo[n]["schema"] else "") + tinfo[n]["name"],
+                           "qname": qname(n), "columns": cols_out})
 
         if opts["include_comments"] and target in ("postgres", "mssql"):
             d = descriptions.get(n, {})
             ttext = d.get("table") or t.get("comment")
             if ttext:
                 desc_blocks.append(_comment_sql(target, tinfo[n], None, ttext, namer))
+                desc_stmts.append({"kind": "comment", "table": n, "sql": desc_blocks[-1][:-1]})
             for c in t["columns"]:
                 ctext = (d.get("columns", {}) or {}).get(c["name"]) or c.get("comment")
                 if ctext:
                     desc_blocks.append(_comment_sql(target, tinfo[n], col_target[(n, c["name"])], ctext, namer))
+                    desc_stmts.append({"kind": "comment", "table": n, "sql": desc_blocks[-1][:-1]})
 
     deps = {n: {r["ref_table"] for r in tables[n]["relations"] if r["ref_table"] in sel} for n in selected}
     order = _topo(selected, deps)
@@ -581,10 +587,15 @@ def generate_ddl(tables: dict, source_engine: str, target: str, options: dict = 
         body += ["-- Descripciones"] + desc_blocks + [""]
     sql = "\n".join(header + body).rstrip() + "\n"
 
+    statements = [{"kind": "schema", "table": None, "sql": f"CREATE SCHEMA {namer.q(sc)}"} for sc in schemas]
+    statements += [{"kind": "table", "table": n, "sql": create_blocks[n][:-1]} for n in order]
+    statements += fk_stmts + desc_stmts
+
     stats["warnings"] = sum(1 for w in warnings if w["level"] == "warn")
     stats["errors"] = sum(1 for w in warnings if w["level"] == "error")
     stats["infos"] = sum(1 for w in warnings if w["level"] == "info")
-    return {"sql": sql, "warnings": warnings, "stats": stats, "tables": tables_out, "target": target, "options": opts,
+    return {"sql": sql, "warnings": warnings, "stats": stats, "tables": tables_out, "target": target, "options": opts, "statements": statements,
+            "order": order,
             "filename": re.sub(r"[^\w.\- ]+", "_", f"migracion_{alias or 'esquema'}_a_{target}").strip(" ._") + ".sql"}
 
 

@@ -114,6 +114,10 @@ class ScrubTests(unittest.TestCase):
         self.assertNotIn("Sup3r", msg)
         self.assertNotIn("hunter2", msg)
 
+    def test_summarize_error_skips_postgres_context_lines(self):
+        err = RuntimeError("\n".join(['relation "prueba" does not exist', "LINE 1: SELECT COUNT(*) FROM prueba", "                              ^", ""]))
+        self.assertEqual(summarize_error(err), 'relation "prueba" does not exist')
+
     def test_summarize_error_scrubs(self):
         self.assertNotIn("zzz", summarize_error(RuntimeError("x\nPassword=zzz;")))
 

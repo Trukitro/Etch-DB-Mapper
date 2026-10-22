@@ -11,9 +11,11 @@ Convenciones
   (scan_started / scan_progress / scan_finished) vía evaluate_js.
 """
 import base64
+import hashlib
 import json
 import logging
 import os
+import secrets
 import subprocess
 import sys
 import threading
@@ -24,7 +26,7 @@ from datetime import datetime
 from . import updates
 from . import uri as uri_tools
 from .demo import DEMO_ALIAS, create_demo_db
-from . import docs_export, joins, migrate
+from . import copy_engine, docs_export, joins, migrate
 from .diff import describe, diff_schemas
 from .inference import infer_relations
 from .paths import resource_path
@@ -46,6 +48,8 @@ class Api:
         self._lock = threading.Lock()
         self._counter = 0
         self._scans: dict = {}   # conn_id -> estado del escaneo en curso
+        self._copy_plans: dict = {}   # token -> plan de copia revisado (sin escribir nada)
+        self._copy_run = None         # copia en curso: {"thread", "cancel", "dry_run"}
 
     def _bind(self, window):
         self._window = window
@@ -410,6 +414,114 @@ class Api:
         # SQL Server Management Studio abre mejor los scripts con acentos si llevan BOM UTF-8
         result["file_content"] = ("﻿" + result["sql"]) if target == "mssql" else result["sql"]
         return {"ok": True, **result}
+
+    # ----------------------------------------- migración, fase 2 (copiar datos)
+    COPY_PLAN_TTL = 30 * 60
+
+    def _purge_copy_plans(self):
+        now = time.time()
+        for token in [t for t, p in self._copy_plans.items() if now - p["created"] > self.COPY_PLAN_TTL]:
+            self._copy_plans.pop(token, None)
+        while len(self._copy_plans) > 8:
+            self._copy_plans.pop(next(iter(self._copy_plans)))
+
+    @staticmethod
+    def _uri_digest(src_uri: str, dst_uri: str) -> str:
+        return hashlib.sha256((src_uri + "\0" + dst_uri).encode("utf-8")).hexdigest()
+
+    def preflight_copy(self, source_alias: str, target_alias: str, options: dict = None) -> dict:
+        """Revisa una copia de datos SIN escribir nada: script, estado del destino y filas por tabla.
+        Devuelve un `token` para simular o ejecutar la copia."""
+        src_entry, tables = self._schema_for(source_alias)
+        if tables is None:
+            return {"ok": False, "error": "Escanea la conexión de origen primero."}
+        dst_entry = self._store.get(target_alias)
+        if not dst_entry:
+            return {"ok": False, "error": "Elige la conexión de destino (créala antes: debe ser una base nueva o vacía)."}
+        if dst_entry.get("secret_error") or src_entry.get("secret_error"):
+            return {"ok": False, "error": "No se pudo descifrar la contraseña de una de las conexiones: edítala y vuelve a escribirla."}
+        src_uri, dst_uri = src_entry["uri"], dst_entry["uri"]
+        src_engine, dst_engine = detect_engine(src_uri), detect_engine(dst_uri)
+        driver_error = check_driver_available(dst_uri)
+        if driver_error:
+            return {"ok": False, "error": driver_error}
+        notes = self._store.get_annotations(src_entry["id"]).get("tables", {})
+        descriptions = {n: {"table": a.get("note", ""), "columns": a.get("columns", {})} for n, a in notes.items() if n in tables}
+        try:
+            plan = copy_engine.build_plan(tables, src_engine or "", src_uri, dst_engine, dst_uri, options or {}, source_alias, descriptions,
+                                          same_connection=(source_alias == target_alias or src_uri == dst_uri))
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        ddl = plan["ddl"]
+        token = secrets.token_hex(16)
+        with self._lock:
+            self._purge_copy_plans()
+            self._copy_plans[token] = {"created": time.time(), "source": source_alias, "target": target_alias, "plan": plan, "tables": tables,
+                                       "src_engine": src_engine or "", "dst_engine": dst_engine, "digest": self._uri_digest(src_uri, dst_uri)}
+        by = plan["read_only_by"]
+        return {
+            "ok": True, "token": token, "target": target_alias, "target_engine": dst_engine, "blockers": plan["blockers"], "can_start": not plan["blockers"],
+            "warnings": ddl["warnings"], "existing": plan["existing"][:20], "stats": ddl["stats"], "options": ddl["options"],
+            "total_rows": sum(plan["counts"].values()),
+            "tables": [{"name": t["name"], "target_name": t["target_name"], "rows": plan["counts"].get(t["name"]), "columns": len(t["columns"])} for t in ddl["tables"]],
+            "read_only": {"by": by, "note": ("El origen se abre en modo de solo lectura impuesto por la propia base de datos." if by == "database" else
+                          "SQL Server no tiene modo de solo lectura de sesión: la app solo emite SELECT. Usa un login con permisos de solo lectura.")},
+        }
+
+    def start_copy(self, token: str, confirm_text: str = "", dry_run: bool = False) -> dict:
+        """Inicia la copia (o el simulacro: lee y convierte sin escribir). La copia real exige escribir el nombre del destino."""
+        with self._lock:
+            self._purge_copy_plans()
+            entry = self._copy_plans.get(token)
+            running = self._copy_run is not None and self._copy_run["thread"].is_alive()
+        if running:
+            return {"ok": False, "error": "Ya hay una copia en curso."}
+        if entry is None:
+            return {"ok": False, "error": "El plan venció o no existe: vuelve a revisar la copia."}
+        plan = entry["plan"]
+        if plan["blockers"]:
+            return {"ok": False, "error": "La revisión encontró bloqueos: " + " ".join(plan["blockers"])}
+        if not dry_run and (confirm_text or "").strip() != entry["target"]:
+            return {"ok": False, "error": f"Para copiar de verdad escribe exactamente el nombre del destino: {entry['target']}"}
+        src_entry, dst_entry = self._store.get(entry["source"]), self._store.get(entry["target"])
+        if not src_entry or not dst_entry or self._uri_digest(src_entry["uri"], dst_entry["uri"]) != entry["digest"]:
+            return {"ok": False, "error": "Una de las conexiones cambió después de la revisión: revísala de nuevo."}
+        if not dry_run:   # el destino pudo cambiar desde la revisión: se vuelve a comprobar justo antes de escribir
+            try:
+                blockers, _ = copy_engine.target_blockers(dst_entry["uri"], entry["dst_engine"], plan["ddl"])
+            except Exception as e:
+                return {"ok": False, "error": "No se pudo revisar el destino: " + summarize_error(e)}
+            if blockers:
+                return {"ok": False, "error": "El destino ya no cumple las condiciones: " + " ".join(blockers)}
+        cancel = threading.Event()
+        thread = threading.Thread(target=self._copy_worker, args=(entry, src_entry["uri"], dst_entry["uri"], bool(dry_run), cancel), daemon=True)
+        with self._lock:
+            self._copy_run = {"thread": thread, "cancel": cancel, "dry_run": bool(dry_run)}
+        self._emit("copy_started", {"dry_run": bool(dry_run), "source": entry["source"], "target": entry["target"], "tables_total": len(plan["ddl"]["order"]),
+                                    "rows_all": sum(plan["counts"].values())})
+        thread.start()
+        return {"ok": True}
+
+    def _copy_worker(self, entry, src_uri, dst_uri, dry_run, cancel):
+        plan = entry["plan"]
+        try:
+            report = copy_engine.run_copy(plan["ddl"], entry["tables"], entry["src_engine"], src_uri, entry["dst_engine"], dst_uri,
+                                          lambda p: self._emit("copy_progress", p), cancel, dry_run, plan["counts"])
+        except Exception as e:   # un hilo no puede morir en silencio
+            log.exception("La copia falló de forma inesperada")
+            report = {"ok": False, "dry_run": dry_run, "cancelled": False, "tables": [], "errors": [summarize_error(e)], "warnings": [],
+                      "rows_copied": 0, "rows_total": 0, "seconds": 0}
+        # el registro lleva solo conteos y nombres de tabla, nunca valores
+        log.info("Copia %s %s -> %s: ok=%s tablas=%d filas=%d errores=%d", "(simulacro)" if dry_run else "", entry["source"], entry["target"],
+                 report["ok"], len(report["tables"]), report["rows_copied"], len(report["errors"]))
+        self._emit("copy_finished", report)
+
+    def cancel_copy(self) -> dict:
+        run = self._copy_run
+        if run is None or not run["thread"].is_alive():
+            return {"ok": False, "error": "No hay una copia en curso."}
+        run["cancel"].set()
+        return {"ok": True}
 
     def export_docs(self, alias: str, kind: str) -> dict:
         """Genera el diccionario de datos: 'markdown', 'csv' o 'html' (informe interactivo)."""
