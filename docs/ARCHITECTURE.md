@@ -16,6 +16,7 @@ Aplicación de escritorio en dos capas que se hablan por un puente de pywebview:
 │   ├─ core/storage.py   Store: db_maps.json + settings.json + snapshots/ (atómico, id estable)
 │   ├─ core/inference.py Relaciones probables por nombre · core/diff.py Comparación de versiones
 │   ├─ core/joins.py     Caminos entre tablas + SQL de JOIN · core/docs_export.py Diccionario: MD/CSV/HTML
+│   ├─ core/migrate.py   Migración fase 1: DDL para otro motor (mapa de tipos, advertencias)
 │   ├─ core/updates.py   Aviso de versión nueva (opcional) · core/logs.py Registro sin contraseñas      │
 │   ├─ core/scanner.py   run_db_scan(uri, progress) → esquema + meta  (pyDAL)               │
 │   └─ core/demo.py, core/paths.py, core/version.py                                         │
@@ -57,6 +58,7 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 | `list_versions(alias)`, `compare_versions(alias, newer, older)` | Historial de versiones del esquema y su diferencia |
 | `save_annotation(alias, tabla, columna, campos)` | Nota/etiquetas/responsable de una tabla o nota de una columna (se guarda en `annotations/`) |
 | `find_paths(alias, origen, destino, incluir_probables)` | Caminos entre dos tablas + SQL del JOIN |
+| `list_migration_targets()`, `plan_migration(alias, destino, opciones)` | Migración fase 1: genera el script de esquema para otro motor (solo texto; no se conecta a ningún destino) |
 | `export_docs(alias, formato)` | Diccionario de datos: `markdown`, `csv` o `html` (informe con mapa) |
 | `security_status()` | Estado del cifrado de contraseñas |
 | `check_updates(force)` | Consulta (opcional) la última versión en GitHub |
@@ -118,6 +120,12 @@ Cada escaneo exitoso llama a `Store.add_snapshot()`: guarda el esquema en forma 
 - **Notas del usuario.** `Store.set_annotation()` guarda en `annotations/<id>.json` (clave = nombre de tabla/columna, con límites de tamaño). `get_schema` las devuelve en `annotations`. La descripción efectiva es *nota del usuario > comentario de la base*.
 - **Rutas.** `core/joins.py` arma el grafo con las FK (y las relaciones probables si se pide), busca los caminos simples más cortos (con un presupuesto de expansiones para grafos densos) y los ordena: primero los que solo usan claves reales. `join_sql()` cita los identificadores según el motor y califica con el esquema.
 - **Exportación.** `core/docs_export.py` genera Markdown, CSV (con BOM para Excel) e informe HTML. El informe incrusta Cytoscape (de `webui/vendor/`), los datos como JSON inerte (`</` escapado) y escapa con `html.escape` todo texto de la base o del usuario; no usa recursos remotos.
+
+## Migración (fase 1)
+
+`core/migrate.py::generate_ddl(tables, motor_origen, destino, opciones, descriptions)` convierte el esquema normalizado en un script: `parse_type()` lleva cada tipo de origen a una categoría común (`int`, `decimal`, `varchar`, `datetimetz`, `rowversion`…) y `render_type()` la escribe para el destino con sus advertencias; `translate_default()` solo traduce los valores por defecto que reconoce (nunca adivina). El resultado trae el SQL, la lista de advertencias (`error`/`warn`/`info`), estadísticas y el mapa columna a columna. Las claves foráneas se emiten al final con `ALTER TABLE` (en SQLite van dentro de `CREATE TABLE`). Las columnas usadas como clave se acotan para SQL Server/MySQL.
+
+Para que la traducción sea fiel, el escaneo lee metadatos extra con consultas opcionales (`scanner._column_extras`: valor por defecto, identidad, precisión; `scanner._uniques`). El esquema guardado ahora puede traer por columna `identity`, `default` y `prec`, y por tabla `uniques`; los esquemas guardados por versiones anteriores siguen funcionando (esos campos valen vacío/falso). Esos campos **no** entran en la comparación de versiones (`compact_schema`), para no marcar cambios falsos tras actualizar. Plan completo y reglas de seguridad de las fases siguientes: [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md).
 
 ## Relaciones probables
 

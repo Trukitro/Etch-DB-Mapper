@@ -34,6 +34,10 @@ Por eso recomendamos, además: usar **cuentas de solo lectura** en las bases, no
 
 Solo el catálogo del motor (`INFORMATION_SCHEMA`, `sys.*`, `pragma_*` de SQLite). Son consultas fijas, sin parámetros ni texto tuyo concatenado en el SQL, y un número constante de ellas (no una por tabla). El código está en `core/scanner.py`. La opción *Probar conexión* ejecuta un `SELECT 1`.
 
+## Migración entre motores
+
+La **fase 1** (2.4.0) solo **genera un script SQL**: no abre ninguna conexión al destino y no escribe en ninguna base. El script contiene únicamente sentencias que crean objetos nuevos (sin `DROP`, `TRUNCATE`, `DELETE`, `UPDATE` ni `IF NOT EXISTS`), de modo que ejecutarlo contra una base que ya tiene esas tablas falla en lugar de pisarlas. Lo ejecutas tú, donde y cuando decidas. La copia de datos (fase 2) todavía no existe; cuando llegue cambiará la promesa de «solo metadatos» y vendrá con las reglas descritas en [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md): origen en solo lectura impuesto por la propia base, destino obligatoriamente vacío, plan y simulacro previos.
+
 ## Notas e informes exportados
 
 Las notas, etiquetas y responsables que escribes se guardan en tu carpeta de datos (`annotations/`), nunca en tu base. Los informes exportables (Markdown, CSV, HTML) incluyen **nombres de tablas y columnas, tipos, relaciones y tus notas**, y **nunca** datos de las tablas, URI ni contraseñas; antes de generar el HTML la app te lo recuerda. Aun así, los nombres de tablas y las notas pueden ser información sensible de tu organización: revísalos antes de compartirlos. El informe HTML es autocontenido (sin recursos remotos) y escapa todo texto, de modo que una nota o un nombre de tabla malicioso no puede ejecutar código al abrirlo.

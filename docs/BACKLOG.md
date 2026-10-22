@@ -176,3 +176,16 @@ vaya trabajando.
 - [ ] Importar/exportar las notas (JSON) para compartirlas entre equipos o conexiones.
 - [ ] «Dónde se usa esta columna»: columnas del mismo nombre en otras tablas.
 - [ ] Revisión de calidad: FK sin índice, columnas del mismo nombre con distinto tipo.
+
+### 2.4.0 — migración, fase 1
+- [x] Pestaña Migrar: script de creación de tablas para PostgreSQL, SQL Server, MySQL y SQLite (`core/migrate.py`).
+- [x] Metadatos extra en el escaneo: identidad, valores por defecto, precisión de decimales y UNIQUE.
+- [x] Plan de las fases 2 y 3 con las reglas de seguridad (`MIGRATION_PLAN.md`).
+
+### Migración — siguientes pasos
+- [ ] **Probar los scripts de PostgreSQL, SQL Server y MySQL contra servidores reales** (hoy solo SQLite se ejecuta en las pruebas).
+- [ ] Fase 2: copia de datos con origen en solo lectura impuesto por la base, destino obligatoriamente vacío, plan, simulacro y verificación.
+- [ ] Índices no únicos, `CHECK` y reglas `ON DELETE/ON UPDATE` en el script.
+- [ ] Elegir qué tablas migrar desde la interfaz (la API ya admite `only`).
+- [ ] Informe de compatibilidad de vistas, procedimientos y triggers («revisar a mano»).
+- [ ] Mapa de tipos editable por el usuario.

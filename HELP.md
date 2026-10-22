@@ -83,6 +83,25 @@ Los informes contienen **nombres de tablas y columnas, tipos, relaciones y tus n
 
 La pestaña **Rutas** responde «¿cómo uno la tabla A con la tabla B?». Elige origen y destino (o usa **Camino hasta…** en el Explorador) y verás los caminos más cortos por claves foráneas, con claves reales primero y, si quieres, también relaciones probables. Cada camino trae el **SQL del JOIN** para copiar y un botón para **resaltarlo en el mapa**. La app solo genera el texto; no ejecuta nada en tu base. Los caminos con relaciones probables llevan una advertencia en el SQL.
 
+### Migrar a otro motor (fase 1: script de esquema)
+
+La pestaña **Migrar** genera el **script SQL para crear en otra base las tablas** de la conexión actual:
+
+1. **Elige el motor de destino** (PostgreSQL, SQL Server, MySQL / MariaDB o SQLite).
+2. Ajusta las **opciones** si quieres: un **esquema nuevo** (PostgreSQL / SQL Server) o un **prefijo** para aislar lo migrado, el estilo de nombres, y qué incluir (claves foráneas, UNIQUE, identidades, valores por defecto, descripciones).
+3. Pulsa **Generar script**. Verás el resumen, las **advertencias** (errores, avisos e información), **cómo se traduce cada columna** (tipo de origen → tipo del destino) y el script, que puedes **copiar o guardar como `.sql`**.
+
+Qué tienes que saber:
+
+- **Solo genera texto.** La app no se conecta al destino ni escribe en ninguna base; tu base de origen no se modifica. Tú revisas y ejecutas el script.
+- El script **solo crea objetos nuevos**: no contiene `DROP`, `TRUNCATE`, `DELETE` ni `UPDATE` y no usa `IF NOT EXISTS`, así que si algo ya existe en el destino **falla en vez de pisarlo**. Úsalo en una **base nueva o vacía**; si el destino ya tiene tablas, elige un esquema nuevo o un prefijo.
+- **Revisa las advertencias** antes de ejecutarlo. Cada tipo, valor por defecto o detalle que no se puede traducir con seguridad se omite y se avisa: la app nunca adivina. Los **errores** (por ejemplo, dos tablas que quedarían con el mismo nombre) hay que corregirlos antes.
+- **No se migran** (se avisa): índices no únicos, restricciones `CHECK`, reglas `ON DELETE/ON UPDATE`, vistas, procedimientos almacenados, triggers ni los datos.
+- Para una traducción fiel conviene **reescanear** la conexión (a partir de la 2.4 el escaneo lee precisión de decimales, identidades, valores por defecto y UNIQUE).
+- **Prueba el script primero en una base desechable.** Los scripts de SQLite se verifican ejecutándolos; los de PostgreSQL, SQL Server y MySQL están revisados, pero no probados contra servidores reales.
+
+Copiar los **datos** llegará en una fase posterior, con más salvaguardas (el origen en modo solo lectura impuesto por la base, destino obligatoriamente vacío, plan y simulacro previos y verificación al final). Más detalle en `docs/MIGRATION_PLAN.md` del repositorio.
+
 ### Cambios
 
 La pestaña **Cambios** compara dos versiones del esquema de la misma conexión. Cada vez que reescaneas y el esquema es distinto, se guarda una versión nueva (se conservan las últimas 8). Verás qué **tablas, columnas y relaciones** se agregaron, quitaron o modificaron (tipo, nulabilidad, clave primaria), con un resumen que puedes copiar en Markdown. Tras un escaneo que encuentra diferencias, la app te avisa. Es ideal para detectar qué cambió en una base entre dos despliegues.
@@ -111,7 +130,7 @@ El mapa dibuja las tablas como nodos y las claves foráneas como flechas (`tabla
 | `Ctrl+N` | Nueva conexión |
 | `Ctrl+K` o `/` | Buscar tablas |
 | `F5` | Reescanear la conexión actual |
-| `Alt+1` … `Alt+5` | Resumen, Explorador, Mapa, Rutas, Cambios |
+| `Alt+1` … `Alt+6` | Resumen, Explorador, Mapa, Rutas, Cambios, Migrar |
 | `Ctrl+B` | Mostrar u ocultar la barra lateral |
 | `?` | Abrir esta ayuda |
 | `Esc` | Cerrar diálogos, limpiar la búsqueda |

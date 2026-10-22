@@ -2,6 +2,22 @@
 
 Historial de cambios de Etch-DB-Mapper. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen [SemVer](https://semver.org/lang/es/).
 
+## [2.4.0] - 2026-10-22
+
+### Nuevo
+- **Pestaña Migrar** (`Alt+6`), fase 1 de la migración entre motores: genera el **script SQL de creación de tablas** para PostgreSQL, SQL Server, MySQL o SQLite con tipos traducidos, claves primarias y foráneas (también compuestas), UNIQUE, identidad/autoincremento, valores por defecto traducibles y descripciones (las de la base y tus notas).
+- Informe de **advertencias** (errores, avisos, información) y vista de **cómo se traduce cada columna**.
+- Opciones para aislar lo migrado: **esquema nuevo**, **prefijo** de tablas y estilo de nombres; incluir o no claves foráneas, UNIQUE, identidades, valores por defecto y descripciones. Guardar como `.sql` o copiar.
+- El escaneo ahora lee también **precisión de decimales, identidades, valores por defecto y restricciones UNIQUE** (consultas opcionales de solo lectura: si fallan, el escaneo sigue igual). Verificado contra un PostgreSQL real.
+- `docs/MIGRATION_PLAN.md`: diseño de las fases siguientes (copiar datos con el origen en solo lectura impuesto por la base y destino obligatoriamente vacío).
+
+### Seguridad
+- Esta fase **no se conecta a ningún destino ni escribe en ninguna base**. El script solo crea objetos nuevos: sin `DROP`, `TRUNCATE`, `DELETE`, `UPDATE`, `INSERT` ni `IF NOT EXISTS` (una prueba automática lo verifica para cada motor).
+
+### Cambiado
+- Las columnas de texto usadas como clave se acotan en SQL Server y MySQL (no admiten `MAX`/`TEXT` en una clave) y las claves foráneas heredan el mismo tipo que su tabla padre.
+- El escaneo suma dos consultas opcionales (detalles de columnas y UNIQUE): hasta 7 en total.
+
 ## [2.3.0] - 2026-10-21
 
 Versión «documental»: la app ahora sirve también para documentar y compartir lo que descubre.

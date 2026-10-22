@@ -19,12 +19,13 @@ Detalle completo —incluido lo que el cifrado **no** puede proteger— en [`SEC
 ## Características
 
 - **Asistente de conexión**: elige el tipo de base (PostgreSQL, SQL Server, MySQL, SQLite), completa servidor, usuario y contraseña, **prueba la conexión** y listo. La URI de pydal sigue disponible para quien la prefiere.
-- **Escaneo rápido**: un número fijo de consultas (4 más una opcional de descripciones), sin importar cuántas tablas tenga la base (una de 171 tablas pasó de 513 consultas a 4), con progreso por fases.
+- **Escaneo rápido**: un número fijo de consultas (4 más hasta 3 opcionales: descripciones, detalles de columnas y UNIQUE), sin importar cuántas tablas tenga la base (una de 171 tablas pasó de 513 consultas a 4), con progreso por fases.
 - **Mapa relacional** (Cytoscape.js): enfoque al pasar el mouse, panel de detalle, colores por grupo de tablas, alcance «relacionadas / todas / vecindad», varios layouts, posiciones que se recuerdan, exportar a PNG.
 - **Relaciones probables por nombre**: muchas bases antiguas no declaran claves foráneas. La app deduce `Pedidos.ClienteID → Clientes` por nombres y tipos y las dibuja con línea punteada, siempre como *sugerencias* y con interruptor.
 - **Cambios entre escaneos**: cada vez que el esquema cambia se guarda una versión; compáralas y ve qué tablas, columnas y relaciones se agregaron, quitaron o modificaron (con resumen copiable en Markdown).
 - **Diccionario de datos**: documenta tus tablas y columnas con notas, etiquetas y responsables (se guardan en tu equipo y sobreviven a los reescaneos). La app también lee las **descripciones que la base ya tiene** (`COMMENT ON`, `MS_Description`, `COMMENT=`). Exporta a **Markdown**, **Excel (CSV)** o a un **informe HTML interactivo de un solo archivo**, con el mapa incluido, para compartir sin que el otro instale nada.
 - **Rutas entre tablas**: «¿cómo uno `Pedidos` con `Conductores`?». Encuentra los caminos por claves foráneas (y relaciones probables) y genera el **SQL del JOIN** listo para copiar, para SQL Server, PostgreSQL, MySQL y SQLite. Solo genera texto: no ejecuta nada.
+- **Migrar a otro motor (fase 1)**: genera el **script SQL de creación de tablas** para PostgreSQL, SQL Server, MySQL o SQLite a partir de lo que escaneaste: tipos traducidos, claves primarias y foráneas, UNIQUE, identidades, valores por defecto y descripciones, con un informe de advertencias. **Solo genera texto**: no se conecta al destino ni escribe en ninguna base, y el script solo crea objetos nuevos (sin `DROP`, `TRUNCATE`, `DELETE` ni `UPDATE`). Copiar los datos llegará después, con salvaguardas (ver [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md)).
 - **Explorador** con búsqueda por tabla, columna o nota, filtros (incluido *Sin documentar*), insignias PK/FK y copia de DDL aproximado.
 - **Ayuda y Novedades** dentro de la app, pensadas para usuarios nuevos. Tema oscuro / claro / del sistema, atajos de teclado, 100 % offline.
 
@@ -36,6 +37,7 @@ Detalle completo —incluido lo que el cifrado **no** puede proteger— en [`SEC
 | ![Relaciones probables](docs/images/06-mapa-relaciones-probables.png) **Relaciones probables** (línea punteada) en una base sin claves foráneas | ![Cambios](docs/images/07-cambios.png) **Cambios entre dos escaneos** |
 | ![Documentación](docs/images/11-documentacion.png) **Diccionario de datos**: notas, etiquetas y responsable | ![Rutas](docs/images/12-rutas.png) **Rutas entre tablas** con el SQL del JOIN |
 | ![Informe HTML](docs/images/13-informe-html.png) **Informe HTML** interactivo de un solo archivo | ![Preferencias y seguridad](docs/images/09-preferencias.png) **Preferencias**: contraseñas cifradas y actualizaciones |
+| ![Migración](docs/images/14-migracion.png) **Migrar a otro motor**: opciones, advertencias y tipos | ![Script de migración](docs/images/15-migracion-script.png) **Script SQL** generado para SQL Server |
 | ![Explorador](docs/images/03-explorador.png) **Explorador de tablas** | |
 
 ## Instalación
@@ -57,7 +59,7 @@ Opciones: `--debug` (DevTools con clic derecho → Inspeccionar), `--data-dir RU
 
 1. **Nueva conexión** → nombre, tipo de base y servidor / usuario / contraseña. ¿Prefieres la URI? Pestaña *URI avanzada*, por ejemplo `postgres://usuario:clave@host:5432/base`.
 2. **Probar conexión** y **Guardar y escanear**.
-3. Explora **Resumen**, **Explorador**, **Mapa**, **Rutas** y **Cambios**; documenta tus tablas y exporta el diccionario cuando quieras.
+3. Explora **Resumen**, **Explorador**, **Mapa**, **Rutas**, **Cambios** y **Migrar**; documenta tus tablas y exporta el diccionario cuando quieras.
 
 Más ejemplos de URI por motor, atajos y solución de problemas: [`HELP.md`](HELP.md) (también dentro de la app, en *Ayuda*). ¿Primera vez? Prueba el botón **Probar con una base de ejemplo**.
 
@@ -74,6 +76,7 @@ core/
   inference.py        Relaciones probables por nombre
   joins.py            Caminos entre tablas y generador de JOIN
   docs_export.py      Diccionario de datos: Markdown, CSV e informe HTML
+  migrate.py          Migración fase 1: script de esquema para otro motor
   diff.py             Comparación de dos versiones del esquema
   updates.py          Aviso de versión nueva (opcional)
   logs.py             Registro sin contraseñas
