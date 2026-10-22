@@ -16,7 +16,8 @@ Aplicación de escritorio en dos capas que se hablan por un puente de pywebview:
 │   ├─ core/storage.py   Store: db_maps.json + settings.json + snapshots/ (atómico, id estable)
 │   ├─ core/inference.py Relaciones probables por nombre · core/diff.py Comparación de versiones
 │   ├─ core/joins.py     Caminos entre tablas + SQL de JOIN · core/docs_export.py Diccionario: MD/CSV/HTML
-│   ├─ core/migrate.py   Migración fase 1: DDL para otro motor (mapa de tipos, advertencias)
+│   ├─ core/migrate.py   Migración: DDL para otro motor (mapa de tipos, advertencias)
+│   ├─ core/copy_engine.py Migración: copia de datos (origen solo lectura, destino vacío, plan/simulacro/verificación)
 │   ├─ core/updates.py   Aviso de versión nueva (opcional) · core/logs.py Registro sin contraseñas      │
 │   ├─ core/scanner.py   run_db_scan(uri, progress) → esquema + meta  (pyDAL)               │
 │   └─ core/demo.py, core/paths.py, core/version.py                                         │
@@ -59,6 +60,8 @@ Cada método público de `Api` es invocable desde JS (`Etch.api.metodo(...)` dev
 | `save_annotation(alias, tabla, columna, campos)` | Nota/etiquetas/responsable de una tabla o nota de una columna (se guarda en `annotations/`) |
 | `find_paths(alias, origen, destino, incluir_probables)` | Caminos entre dos tablas + SQL del JOIN |
 | `list_migration_targets()`, `plan_migration(alias, destino, opciones)` | Migración fase 1: genera el script de esquema para otro motor (solo texto; no se conecta a ningún destino) |
+| `preflight_copy(origen, destino, opciones)` | Revisa una copia de datos SIN escribir: script, estado del destino, filas por tabla; devuelve un `token` |
+| `start_copy(token, confirmación, simulacro)`, `cancel_copy()` | Inicia (o simula) la copia en un hilo; eventos `copy_started`, `copy_progress`, `copy_finished` |
 | `export_docs(alias, formato)` | Diccionario de datos: `markdown`, `csv` o `html` (informe con mapa) |
 | `security_status()` | Estado del cifrado de contraseñas |
 | `check_updates(force)` | Consulta (opcional) la última versión en GitHub |
@@ -126,6 +129,12 @@ Cada escaneo exitoso llama a `Store.add_snapshot()`: guarda el esquema en forma 
 `core/migrate.py::generate_ddl(tables, motor_origen, destino, opciones, descriptions)` convierte el esquema normalizado en un script: `parse_type()` lleva cada tipo de origen a una categoría común (`int`, `decimal`, `varchar`, `datetimetz`, `rowversion`…) y `render_type()` la escribe para el destino con sus advertencias; `translate_default()` solo traduce los valores por defecto que reconoce (nunca adivina). El resultado trae el SQL, la lista de advertencias (`error`/`warn`/`info`), estadísticas y el mapa columna a columna. Las claves foráneas se emiten al final con `ALTER TABLE` (en SQLite van dentro de `CREATE TABLE`). Las columnas usadas como clave se acotan para SQL Server/MySQL.
 
 Para que la traducción sea fiel, el escaneo lee metadatos extra con consultas opcionales (`scanner._column_extras`: valor por defecto, identidad, precisión; `scanner._uniques`). El esquema guardado ahora puede traer por columna `identity`, `default` y `prec`, y por tabla `uniques`; los esquemas guardados por versiones anteriores siguen funcionando (esos campos valen vacío/falso). Esos campos **no** entran en la comparación de versiones (`compact_schema`), para no marcar cambios falsos tras actualizar. Plan completo y reglas de seguridad de las fases siguientes: [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md).
+
+## Copia de datos (migración, fase 2)
+
+`core/copy_engine.py` ejecuta lo que `generate_ddl()` planificó (`statements`, `order`, mapa de columnas). Piezas: `SourceReader` (conexión de **solo lectura**: PostgreSQL `REPEATABLE READ READ ONLY`, MySQL `SESSION TRANSACTION READ ONLY`, SQLite `PRAGMA query_only`; en SQL Server una guardia que solo admite `SELECT`), `TargetWriter` (inserciones por lotes con el estilo de parámetros del driver), `target_blockers()` (comprueba el destino: vacío o sin colisiones, esquema nuevo inexistente), `make_converter()` (valores del origen → formato del destino según el tipo) y `run_copy()` (crea y carga tabla por tabla en una transacción, ajusta identidades, agrega FK y descripciones al final y verifica conteos).
+
+`Api.preflight_copy()` guarda el plan revisado bajo un `token` en memoria (30 minutos, y solo con un hash de ambas URI, nunca guarda credenciales). `start_copy()` vuelve a comprobar que las conexiones no cambiaron y que el destino sigue limpio, exige escribir el nombre del destino para copiar de verdad y lanza el hilo; el progreso viaja por eventos. Una sola copia a la vez. Los valores de las tablas nunca llegan al registro. Reglas completas: [`MIGRATION_PLAN.md`](MIGRATION_PLAN.md).
 
 ## Relaciones probables
 

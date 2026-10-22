@@ -5,7 +5,7 @@ Objetivo: migrar bases de datos de un motor a otro (SQL Server ⇄ PostgreSQL �
 | Fase | Qué hace | Estado | Riesgo |
 |---|---|---|---|
 | **1. Solo esquema** | Genera el script `CREATE TABLE` para el motor destino. No se conecta al destino. | ✅ 2.4.0 | Ninguno |
-| **2. Copiar datos** | Copia los datos al destino vacío, con plan, simulacro y verificación. | 🗓️ Diseño | Medio, mitigado por las reglas de abajo |
+| **2. Copiar datos** | Copia los datos al destino vacío, con plan, simulacro y verificación. | ✅ 2.5.0 | Medio, mitigado por las reglas de abajo |
 | **3. Casos difíciles** | Reanudar, tablas enormes, ciclos de claves, BLOB, zonas horarias… | 🗓️ Idea | Alto |
 
 ## Fase 1 (hecha): script de esquema
@@ -29,7 +29,11 @@ Objetivo: migrar bases de datos de un motor a otro (SQL Server ⇄ PostgreSQL �
 
 **Verificación:** el script de **SQLite** se ejecuta de verdad en las pruebas (incluida una ida y vuelta SQLite → SQLite comparando tablas, columnas, claves y UNIQUE). La sintaxis de PostgreSQL, SQL Server y MySQL está cubierta por pruebas de texto y revisada, pero **no se ha ejecutado contra servidores reales**: prueba el script primero en una base desechable.
 
-## Fase 2 (diseño): copiar los datos
+## Fase 2 (hecha en 2.5.0): copiar los datos
+
+Implementada en `core/copy_engine.py` y en *Migrar → Copiar datos*. Todas las reglas de seguridad de abajo se cumplen y tienen prueba automática (origen intacto byte a byte, destino no vacío o con colisión bloqueado, confirmación exacta, destino que cambia tras la revisión, cancelación, fallo a mitad de tabla). **Verificación real:** SQLite → SQLite de punta a punta, y lectura de un PostgreSQL real hacia un SQLite temporal con los conteos iguales. **Sin verificar contra servidores reales:** la *escritura* en PostgreSQL, SQL Server y MySQL y la lectura de SQL Server/MySQL (se prueban con un destino falso que registra las sentencias). Diferencias respecto del diseño original: no hay verificación por suma de control (solo conteos de filas) ni reanudación; el origen de SQL Server se protege con una guardia de la app porque no existe un modo de sesión de solo lectura.
+
+### Diseño original
 
 ### Reglas de seguridad (innegociables)
 

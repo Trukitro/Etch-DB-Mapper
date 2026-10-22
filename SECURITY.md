@@ -36,7 +36,13 @@ Solo el catálogo del motor (`INFORMATION_SCHEMA`, `sys.*`, `pragma_*` de SQLite
 
 ## Migración entre motores
 
-La **fase 1** (2.4.0) solo **genera un script SQL**: no abre ninguna conexión al destino y no escribe en ninguna base. El script contiene únicamente sentencias que crean objetos nuevos (sin `DROP`, `TRUNCATE`, `DELETE`, `UPDATE` ni `IF NOT EXISTS`), de modo que ejecutarlo contra una base que ya tiene esas tablas falla en lugar de pisarlas. Lo ejecutas tú, donde y cuando decidas. La copia de datos (fase 2) todavía no existe; cuando llegue cambiará la promesa de «solo metadatos» y vendrá con las reglas descritas en [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md): origen en solo lectura impuesto por la propia base, destino obligatoriamente vacío, plan y simulacro previos.
+### Copiar datos (2.5.0)
+
+Es la **única función que lee filas de tus tablas y escribe en una base**, y por eso es explícita y opcional. Salvaguardas: el origen se abre en **solo lectura** (impuesto por la propia base en PostgreSQL, MySQL y SQLite; en SQL Server la app solo emite `SELECT` y rechaza todo lo demás, así que usa un login de solo lectura); el destino debe estar **vacío** o usar un esquema/prefijo sin colisiones y se **vuelve a comprobar justo antes de escribir**; **nunca se borra ni se sobrescribe** (solo `CREATE TABLE` e `INSERT`); la copia real exige **escribir el nombre del destino**; hay plan previo y simulacro que no escriben; los valores de las tablas **no se registran** (solo nombres y conteos). Los datos viajan directamente de tu base de origen a tu base de destino a través de tu equipo; no pasan por ningún servicio externo.
+
+### Solo script (2.4.0)
+
+La generación del script de esquema solo **genera un script SQL**: no abre ninguna conexión al destino y no escribe en ninguna base. El script contiene únicamente sentencias que crean objetos nuevos (sin `DROP`, `TRUNCATE`, `DELETE`, `UPDATE` ni `IF NOT EXISTS`), de modo que ejecutarlo contra una base que ya tiene esas tablas falla en lugar de pisarlas. Lo ejecutas tú, donde y cuando decidas. La copia de datos (fase 2) todavía no existe; cuando llegue cambiará la promesa de «solo metadatos» y vendrá con las reglas descritas en [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md): origen en solo lectura impuesto por la propia base, destino obligatoriamente vacío, plan y simulacro previos.
 
 ## Notas e informes exportados
 

@@ -9,7 +9,7 @@ Repo: https://github.com/Trukitro/Etch-DB-Mapper
 ## 🔒 Seguridad y privacidad (lo que tienes que saber)
 
 - **Tus contraseñas se guardan cifradas.** En Windows se cifran con **DPAPI**, ligadas a tu usuario y a tu equipo: no hay ninguna contraseña en claro en el disco, y copiar el archivo a otra PC no las revela. Las conexiones guardadas con versiones anteriores se cifran solas al actualizar.
-- **Solo lectura de metadatos.** La app consulta el catálogo del motor (tablas, columnas, claves); nunca lee ni modifica el contenido de tus tablas.
+- **Solo lectura.** Para mapear, la app consulta únicamente el catálogo del motor (tablas, columnas, claves); no lee el contenido de tus tablas. **Solo si usas «Copiar datos»** lee las filas del origen —siempre en modo solo lectura— y escribe en un destino nuevo o vacío que tú eliges; nunca modifica el origen.
 - **Cero telemetría.** No envía tus datos, tus URI ni tus esquemas a ningún servidor. Todo vive en tu carpeta de datos.
 - **Aviso de versión nueva, opcional y transparente.** Una consulta pública a GitHub, como máximo una vez al día, sin datos tuyos y sin instalar nada solo. Se apaga en *Preferencias* o con `ETCH_NO_UPDATE_CHECK=1`.
 - **Sin secretos en los registros ni en los errores**, y una interfaz que no ejecuta código remoto.
@@ -25,7 +25,9 @@ Detalle completo —incluido lo que el cifrado **no** puede proteger— en [`SEC
 - **Cambios entre escaneos**: cada vez que el esquema cambia se guarda una versión; compáralas y ve qué tablas, columnas y relaciones se agregaron, quitaron o modificaron (con resumen copiable en Markdown).
 - **Diccionario de datos**: documenta tus tablas y columnas con notas, etiquetas y responsables (se guardan en tu equipo y sobreviven a los reescaneos). La app también lee las **descripciones que la base ya tiene** (`COMMENT ON`, `MS_Description`, `COMMENT=`). Exporta a **Markdown**, **Excel (CSV)** o a un **informe HTML interactivo de un solo archivo**, con el mapa incluido, para compartir sin que el otro instale nada.
 - **Rutas entre tablas**: «¿cómo uno `Pedidos` con `Conductores`?». Encuentra los caminos por claves foráneas (y relaciones probables) y genera el **SQL del JOIN** listo para copiar, para SQL Server, PostgreSQL, MySQL y SQLite. Solo genera texto: no ejecuta nada.
-- **Migrar a otro motor (fase 1)**: genera el **script SQL de creación de tablas** para PostgreSQL, SQL Server, MySQL o SQLite a partir de lo que escaneaste: tipos traducidos, claves primarias y foráneas, UNIQUE, identidades, valores por defecto y descripciones, con un informe de advertencias. **Solo genera texto**: no se conecta al destino ni escribe en ninguna base, y el script solo crea objetos nuevos (sin `DROP`, `TRUNCATE`, `DELETE` ni `UPDATE`). Copiar los datos llegará después, con salvaguardas (ver [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md)).
+- **Migrar a otro motor**:
+  - **Script de esquema:** genera el SQL de creación de tablas para PostgreSQL, SQL Server, MySQL o SQLite (tipos traducidos, claves primarias y foráneas, UNIQUE, identidades, valores por defecto y descripciones) con un informe de advertencias. Solo genera texto: no se conecta al destino.
+  - **Copiar datos:** copia los datos a otra base **nueva o vacía**, con el **origen en solo lectura** (impuesto por la propia base en PostgreSQL, MySQL y SQLite), un plan previo que no escribe nada, un simulacro, confirmación escribiendo el nombre del destino, todo o nada por tabla y verificación de conteos. **Nada se borra ni se sobrescribe**, y si el destino tiene cualquier conflicto, se niega. Detalle en [`docs/MIGRATION_PLAN.md`](docs/MIGRATION_PLAN.md).
 - **Explorador** con búsqueda por tabla, columna o nota, filtros (incluido *Sin documentar*), insignias PK/FK y copia de DDL aproximado.
 - **Ayuda y Novedades** dentro de la app, pensadas para usuarios nuevos. Tema oscuro / claro / del sistema, atajos de teclado, 100 % offline.
 
@@ -38,6 +40,7 @@ Detalle completo —incluido lo que el cifrado **no** puede proteger— en [`SEC
 | ![Documentación](docs/images/11-documentacion.png) **Diccionario de datos**: notas, etiquetas y responsable | ![Rutas](docs/images/12-rutas.png) **Rutas entre tablas** con el SQL del JOIN |
 | ![Informe HTML](docs/images/13-informe-html.png) **Informe HTML** interactivo de un solo archivo | ![Preferencias y seguridad](docs/images/09-preferencias.png) **Preferencias**: contraseñas cifradas y actualizaciones |
 | ![Migración](docs/images/14-migracion.png) **Migrar a otro motor**: opciones, advertencias y tipos | ![Script de migración](docs/images/15-migracion-script.png) **Script SQL** generado para SQL Server |
+| ![Plan de copia](docs/images/16-copia-plan.png) **Copiar datos**: plan previo sin escribir nada | ![Resultado de la copia](docs/images/17-copia-resultado.png) **Copia verificada** tabla por tabla |
 | ![Explorador](docs/images/03-explorador.png) **Explorador de tablas** | |
 
 ## Instalación
@@ -76,7 +79,8 @@ core/
   inference.py        Relaciones probables por nombre
   joins.py            Caminos entre tablas y generador de JOIN
   docs_export.py      Diccionario de datos: Markdown, CSV e informe HTML
-  migrate.py          Migración fase 1: script de esquema para otro motor
+  migrate.py          Migración: script de esquema para otro motor
+  copy_engine.py      Migración: copia de datos (origen solo lectura, destino vacío)
   diff.py             Comparación de dos versiones del esquema
   updates.py          Aviso de versión nueva (opcional)
   logs.py             Registro sin contraseñas

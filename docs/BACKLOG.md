@@ -189,3 +189,15 @@ vaya trabajando.
 - [ ] Elegir qué tablas migrar desde la interfaz (la API ya admite `only`).
 - [ ] Informe de compatibilidad de vistas, procedimientos y triggers («revisar a mano»).
 - [ ] Mapa de tipos editable por el usuario.
+
+### 2.5.0 — migración, fase 2
+- [x] Copiar datos a un destino vacío con origen en solo lectura, plan, simulacro, confirmación, cancelación y verificación de conteos (`core/copy_engine.py`).
+- [x] Datos de muestra en la base de ejemplo.
+- [x] Corregidas las comillas de PostgreSQL en el SQL de los JOIN.
+
+### Migración — pendientes tras la fase 2
+- [ ] **Probar la escritura** hacia PostgreSQL, SQL Server y MySQL y la lectura de SQL Server/MySQL contra servidores reales desechables.
+- [ ] Reanudar una copia interrumpida y elegir qué tablas copiar desde la interfaz.
+- [ ] Verificación con sumas de control además de los conteos.
+- [ ] Copiar más rápido en bases grandes (`COPY` en PostgreSQL, `fast_executemany` en SQL Server).
+- [ ] Informe de filas rechazadas en lugar de detener la copia en el primer error (modo opcional).

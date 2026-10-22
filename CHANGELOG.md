@@ -2,6 +2,24 @@
 
 Historial de cambios de Etch-DB-Mapper. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones siguen [SemVer](https://semver.org/lang/es/).
 
+## [2.5.0] - 2026-10-22
+
+### Nuevo
+- **Migrar → Copiar datos** (fase 2 de la migración entre motores): copia los datos a otra base **nueva o vacía** (PostgreSQL, SQL Server, MySQL o SQLite) con las salvaguardas acordadas:
+  - el **origen es de solo lectura** (lo impone la base en PostgreSQL —con foto consistente—, MySQL y SQLite; en SQL Server la app solo emite `SELECT`);
+  - el **destino debe estar vacío** o, si no, usar un esquema/prefijo nuevo sin colisiones; ante cualquier conflicto la app **se niega**, y lo vuelve a comprobar justo antes de escribir;
+  - **nunca se borra ni se sobrescribe** nada: solo `CREATE TABLE` y `INSERT`;
+  - **plan previo** que no escribe, **simulacro** (lee y convierte todo sin escribir), confirmación escribiendo el nombre del destino, **todo o nada por tabla**, **cancelar** y **verificación** de conteos al final;
+  - claves foráneas al final, identidades y secuencias ajustadas, conversión de tipos (booleanos, fechas con zona, JSON, binarios, decimales).
+- La **base de ejemplo** ahora trae filas de muestra.
+
+### Corregido
+- Los nombres con mayúsculas (por ejemplo `Prueba`) ahora llevan comillas en PostgreSQL al generar el SQL de los JOIN de la pestaña Rutas; antes el SQL fallaba porque PostgreSQL pliega a minúsculas lo que no lleva comillas. También se citan las palabras reservadas.
+- Los mensajes de error de PostgreSQL ya no se reducen a un «^» (se ignoran las líneas de contexto).
+
+### Seguridad
+- La copia **no registra valores** de tus tablas (solo nombres y conteos). Las contraseñas de origen y destino se cifran igual que las demás conexiones.
+
 ## [2.4.0] - 2026-10-22
 
 ### Nuevo
