@@ -309,6 +309,16 @@
       if (!ext) return { ok: false, error: 'Formato desconocido.' };
       return { ok: true, filename: 'diccionario_' + alias + '.' + ext, content: '# Diccionario de datos — ' + alias + '\n\n(modo desarrollo: contenido simulado)\n' };
     },
+    async list_migration_targets() { return { targets: ['postgres', 'mssql', 'mysql', 'sqlite'].map((id) => ({ id, label: id })) }; },
+    async plan_migration(alias, target) {   // simulado: la generación real vive en core/migrate.py
+      await delay(300);
+      const tables = finalize(store[alias].data), names = Object.keys(tables);
+      const sql = ['-- (modo desarrollo: script simulado para ' + target + ')'].concat(names.map((n) => 'CREATE TABLE ' + n + ' (...);')).join(String.fromCharCode(10)) + String.fromCharCode(10);
+      return { ok: true, sql, file_content: sql, filename: 'migracion_' + alias + '.sql', target,
+        stats: { tables: names.length, columns: 60, foreign_keys: 21, uniques: 3, identities: 10, warnings: 1, errors: 0, infos: 1 },
+        warnings: [{ level: 'warn', table: names[0], column: 'x', message: 'Aviso de ejemplo (simulado).' }, { level: 'info', table: null, column: null, message: 'No se migran índices no únicos ni datos.' }],
+        tables: names.slice(0, 3).map((n) => ({ name: n, target_name: n, columns: tables[n].columns.map((c) => ({ name: c.name, target_name: c.name, source_type: c.type, target_type: c.type.toUpperCase(), identity: false, nullable: c.null, pk: c.pk })) })) };
+    },
     async pick_file() { return { ok: false }; },
     async save_file(name, content, encoding) {
       const blob = encoding === 'base64' ? new Blob([Uint8Array.from(atob(content), (ch) => ch.charCodeAt(0))]) : new Blob([content], { type: 'text/plain' });

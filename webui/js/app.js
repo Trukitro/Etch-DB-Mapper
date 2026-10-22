@@ -4,7 +4,7 @@
   const Etch = window.Etch;
   const { h, icon, $, clear } = Etch;
 
-  const CONN_VIEWS = ['overview', 'explorer', 'map', 'paths', 'changes'];
+  const CONN_VIEWS = ['overview', 'explorer', 'map', 'paths', 'changes', 'migrate'];
   const FILL_VIEWS = ['explorer', 'map'];
   const TAB_DEFS = [
     ['overview', 'Resumen', 'grid'],
@@ -12,6 +12,7 @@
     ['map', 'Mapa', 'map'],
     ['paths', 'Rutas', 'route'],
     ['changes', 'Cambios', 'history'],
+    ['migrate', 'Migrar', 'migrate'],
   ];
   const PHASES = [['connect', 'Conectar'], ['tables', 'Tablas'], ['columns', 'Columnas'], ['keys', 'Claves'], ['relations', 'Relaciones'], ['build', 'Armar']];
 
@@ -327,7 +328,7 @@
       if (S.alias) Etch.scan(S.alias);
       return;
     }
-    if (e.altKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
+    if (e.altKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
       const c = conn();
       if (c && c.has_data) { e.preventDefault(); Etch.go(TAB_DEFS[Number(e.key) - 1][0]); }
       return;

@@ -24,7 +24,7 @@ from datetime import datetime
 from . import updates
 from . import uri as uri_tools
 from .demo import DEMO_ALIAS, create_demo_db
-from . import docs_export, joins
+from . import docs_export, joins, migrate
 from .diff import describe, diff_schemas
 from .inference import infer_relations
 from .paths import resource_path
@@ -390,6 +390,26 @@ class Api:
         return {"ok": True, "paths": [
             {"steps": p, "length": len(p), "inferred": sum(1 for st in p if st["inferred"]), "sql": joins.join_sql(engine, tables, p)}
             for p in found]}
+
+    # ------------------------------------------- migración, fase 1 (solo esquema)
+    def list_migration_targets(self) -> dict:
+        return {"targets": [{"id": k, "label": v} for k, v in migrate.TARGETS.items()]}
+
+    def plan_migration(self, alias: str, target: str, options: dict = None) -> dict:
+        """Genera el script de creación de tablas para otro motor. NO se conecta a ningún destino
+        ni escribe en ninguna base: solo devuelve texto (y advertencias) para revisar y guardar."""
+        entry, tables = self._schema_for(alias)
+        if tables is None:
+            return {"ok": False, "error": "Escanea la conexión primero."}
+        notes = self._store.get_annotations(entry["id"]).get("tables", {})
+        descriptions = {n: {"table": a.get("note", ""), "columns": a.get("columns", {})} for n, a in notes.items() if n in tables}
+        try:
+            result = migrate.generate_ddl(tables, detect_engine(entry.get("uri")) or "", target, options or {}, alias=alias, descriptions=descriptions)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        # SQL Server Management Studio abre mejor los scripts con acentos si llevan BOM UTF-8
+        result["file_content"] = ("﻿" + result["sql"]) if target == "mssql" else result["sql"]
+        return {"ok": True, **result}
 
     def export_docs(self, alias: str, kind: str) -> dict:
         """Genera el diccionario de datos: 'markdown', 'csv' o 'html' (informe interactivo)."""

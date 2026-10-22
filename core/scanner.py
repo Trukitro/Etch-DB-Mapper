@@ -186,7 +186,60 @@ def _introspect_information_schema(db, engine, emit):
         "pks": [(r[0], r[1], r[2]) for r in pks],
         "fks": fks,
         "comments": _comments(db, engine, flt),
+        "extras": _column_extras(db, engine, flt),
+        "uniques": _uniques(db, flt),
     }
+
+
+def _column_extras(db, engine, flt):
+    """Detalles que necesita una migración (y que el escaneo básico no pide): valor por
+    defecto, identidad/autoincremento y precisión de los decimales. Opcional: si falla
+    devuelve {} y el resto del esquema queda igual.
+    -> {(schema, tabla, columna): {"default": str|None, "identity": bool, "prec": [p, s]|None}}"""
+    q = db.executesql
+    try:
+        if engine == "postgres":
+            rows = q("SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_DEFAULT, IS_IDENTITY, NUMERIC_PRECISION, NUMERIC_SCALE, DATA_TYPE "
+                     f"FROM INFORMATION_SCHEMA.COLUMNS WHERE {flt('TABLE_SCHEMA')}")
+            ident = lambda r: str(r[4]).upper() == "YES" or str(r[3] or "").lower().startswith("nextval(")  # noqa: E731
+        elif engine == "mssql":
+            rows = q("SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_DEFAULT, "
+                     "COLUMNPROPERTY(OBJECT_ID(QUOTENAME(TABLE_SCHEMA) + '.' + QUOTENAME(TABLE_NAME)), COLUMN_NAME, 'IsIdentity'), "
+                     "NUMERIC_PRECISION, NUMERIC_SCALE, DATA_TYPE "
+                     f"FROM INFORMATION_SCHEMA.COLUMNS WHERE {flt('TABLE_SCHEMA')}")
+            ident = lambda r: r[4] == 1  # noqa: E731
+        elif engine == "mysql":
+            rows = q("SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_DEFAULT, EXTRA, NUMERIC_PRECISION, NUMERIC_SCALE, DATA_TYPE "
+                     f"FROM INFORMATION_SCHEMA.COLUMNS WHERE {flt('TABLE_SCHEMA')}")
+            ident = lambda r: "auto_increment" in str(r[4] or "").lower()  # noqa: E731
+        else:
+            return {}
+    except Exception:
+        return {}
+    out = {}
+    for r in rows:
+        prec = None
+        if str(r[7]).lower() in ("numeric", "decimal", "dec") and r[5] is not None:
+            prec = [int(r[5]), int(r[6] or 0)]
+        out[(r[0], r[1], r[2])] = {"default": (str(r[3]) if r[3] is not None else None), "identity": bool(ident(r)), "prec": prec}
+    return out
+
+
+def _uniques(db, flt):
+    """Restricciones UNIQUE (opcional; [] si falla). -> [(schema, tabla, nombre, [columnas])]"""
+    try:
+        rows = db.executesql(
+            "SELECT tc.TABLE_SCHEMA, tc.TABLE_NAME, tc.CONSTRAINT_NAME, ku.COLUMN_NAME, ku.ORDINAL_POSITION "
+            "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku "
+            "  ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA AND tc.TABLE_NAME = ku.TABLE_NAME "
+            f"WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND {flt('tc.TABLE_SCHEMA')}"
+        )
+    except Exception:
+        return []
+    grouped = {}
+    for schema, table, name, col, pos in rows:
+        grouped.setdefault((schema, table, name), []).append((int(pos or 0), col))
+    return [(sc, t, n, [c for _p, c in sorted(cols)]) for (sc, t, n), cols in grouped.items()]
 
 
 def _comments(db, engine, flt):
@@ -280,6 +333,14 @@ def _introspect_sqlite(db, engine, emit):
         'SELECT m.name, f."from", f."table", f."to" FROM sqlite_master m '
         "JOIN pragma_foreign_key_list(m.name) f WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'"
     )
+    try:   # defaults y UNIQUE: opcionales
+        defaults = q("SELECT m.name, p.name, p.dflt_value FROM sqlite_master m JOIN pragma_table_info(m.name) p "
+                     "WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'")
+        uniq_rows = q('SELECT m.name, il.name, ii.seqno, ii.name FROM sqlite_master m JOIN pragma_index_list(m.name) il '
+                      "JOIN pragma_index_info(il.name) ii WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' "
+                      'AND il."unique" = 1 AND il.origin IN (\'u\', \'c\')')
+    except Exception:
+        defaults, uniq_rows = [], []
 
     pk_cols = {}
     for table, _name, _type, _nn, pk in cols:
@@ -291,12 +352,29 @@ def _introspect_sqlite(db, engine, emit):
             ref_col = (pk_cols.get(ref_table) or [None])[0]
         resolved.append(("main", table, col, "main", ref_table, ref_col))
 
+    extras = {}
+    pk_count = {}
+    for table, _c, _ty, _nn, pk in cols:
+        if pk:
+            pk_count[table] = pk_count.get(table, 0) + 1
+    dflt = {(t, c): d for t, c, d in defaults}
+    for table, name, ctype, _nn, pk in cols:
+        # INTEGER PRIMARY KEY (una sola columna) es un alias del rowid: se autoincrementa solo
+        identity = bool(pk) and pk_count.get(table) == 1 and (ctype or "").strip().lower() == "integer"
+        extras[("main", table, name)] = {"default": dflt.get((table, name)), "identity": identity, "prec": None}
+    grouped = {}
+    for table, idx, seq, col in uniq_rows:
+        grouped.setdefault((table, idx), []).append((seq, col))
+    uniques = [("main", t, idx, [c for _s, c in sorted(cs)]) for (t, idx), cs in grouped.items()]
+
     return {
         "tables": [("main", r[0]) for r in tables],
         "columns": [("main", t, c, (ty or "").lower() or "any", not (nn or pk)) for t, c, ty, nn, pk in cols],
         "pks": [("main", t, c) for t, c, _ty, _nn, pk in cols if pk],
         "fks": resolved,
         "comments": [],   # SQLite no tiene comentarios de esquema
+        "extras": extras,
+        "uniques": uniques,
     }
 
 
@@ -321,7 +399,7 @@ def build_schema(raw) -> dict:
 
     tables = {}
     for schema, name in raw["tables"]:
-        tables[key_of(schema, name)] = {"schema": schema, "name": name, "comment": "", "columns": [], "relations": []}
+        tables[key_of(schema, name)] = {"schema": schema, "name": name, "comment": "", "columns": [], "relations": [], "uniques": []}
 
     pk_set = {(s, t, c) for s, t, c in raw["pks"]}
     for schema, table, col, ctype, nullable in raw["columns"]:
@@ -329,7 +407,14 @@ def build_schema(raw) -> dict:
         if entry is None:  # columna de una vista u objeto que no es tabla base
             continue
         is_pk = (schema, table, col) in pk_set
-        entry["columns"].append({"name": col, "type": ctype, "null": bool(nullable) and not is_pk, "pk": is_pk, "fk": False, "comment": ""})
+        extra = raw.get("extras", {}).get((schema, table, col), {})
+        entry["columns"].append({"name": col, "type": ctype, "null": bool(nullable) and not is_pk, "pk": is_pk, "fk": False, "comment": "",
+                                 "identity": bool(extra.get("identity")), "default": extra.get("default"), "prec": extra.get("prec")})
+
+    for schema, table, _name, cols in raw.get("uniques", []):
+        entry = tables.get(key_of(schema, table))
+        if entry is not None and cols and cols not in entry["uniques"]:
+            entry["uniques"].append(cols)
 
     for schema, table, col, text in raw.get("comments", []):
         entry = tables.get(key_of(schema, table))
@@ -374,11 +459,15 @@ def finalize_schema(tables: dict) -> dict:
                 "pk": bool(c.get("pk", c.get("is_pk", False))),
                 "fk": bool(c.get("fk")) or c.get("name") in fk_cols,
                 "comment": c.get("comment", "") or "",
+                "identity": bool(c.get("identity")),
+                "default": c.get("default"),
+                "prec": c.get("prec"),
             })
         out[name] = {
             "schema": info.get("schema", ""),
             "name": info.get("name", name),
             "comment": info.get("comment", "") or "",
+            "uniques": [list(u) for u in info.get("uniques", [])],
             "columns": columns,
             "relations": relations,
             "referenced_by": [],

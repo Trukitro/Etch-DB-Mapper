@@ -158,6 +158,12 @@ def script(window, api):
         js(window, "Etch.go('paths',{from:'order_items'}); setTimeout(()=>{const t=document.querySelector('[aria-label=\"Tabla de destino\"]'); t.value='customers'; t.dispatchEvent(new Event('change'));}, 400)", 1.8)
         shot("12-rutas")
         export_report(api, demo_alias)
+
+        # --- migración (fase 1): script para SQL Server ---
+        js(window, "Etch.go('migrate'); setTimeout(()=>{document.querySelectorAll('.recent .card')[1].click(); setTimeout(()=>{[...document.querySelectorAll('.btn.primary')].find(b=>b.textContent.includes('Generar')).click();}, 300);}, 500)", 2.8)
+        shot("14-migracion")
+        js(window, "document.querySelectorAll('details.diff-table')[0].open = true; document.querySelector('pre.sql').scrollIntoView({block:'start'}); window.scrollBy(0,-10); document.getElementById('view').scrollTop = document.querySelector('pre.sql').offsetTop - 90", 1.0)
+        shot("15-migracion-script")
         js(window, "Etch.go('map')", 2.5)
         shot("04-mapa")
 
